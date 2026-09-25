@@ -113,6 +113,7 @@ export type IllustrationStatus =
   | "prompt_ready"
   | "generating"
   | "options_ready"
+  | "direction_selected"
   | "approved";
 
 export interface PageCreationState {
@@ -146,6 +147,12 @@ export interface ImageVersion {
   selected: boolean;
   parentVersionId: string | null;
   generationBatchId: string;
+  batchNumber: number;
+  optionIndex: number;
+  optionLabel: string;
+  aspectRatio: PageAspectRatio;
+  compositionDirection: string;
+  visualSeed: string;
   status: "generated" | "selected" | "approved" | "superseded";
 }
 

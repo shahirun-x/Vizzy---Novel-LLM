@@ -17,12 +17,15 @@ function loadTypeScriptModule(relativePath) {
 
 const {
   addVisualReference,
+  appendImageGenerationBatch,
   canOpenPageCreation,
   createDefaultPageCreationState,
   getAdjacentPageBeatId,
+  getImageGenerationBatches,
   removeVisualReference,
   resetEditedPrompt,
   saveEditedPrompt,
+  selectImageVersion,
 } = loadTypeScriptModule("../src/lib/page-creation.ts");
 const { buildIllustrationPrompt } = loadTypeScriptModule("../src/lib/illustration-prompt.ts");
 
@@ -171,4 +174,83 @@ test("opens only approved pages and navigates previous and next in order", () =>
   assert.equal(canOpenPageCreation(plan, "page-2"), true);
   assert.equal(canOpenPageCreation({ ...plan, status: "draft" }, "page-2"), false);
   assert.equal(canOpenPageCreation(plan, "missing-page"), false);
+});
+
+function imageVersion({ id, pageId = "page-1", batchNumber = 1, optionIndex = 1, prompt = "Exact prompt", aspectRatio = "3:4" }) {
+  return {
+    id,
+    pageId,
+    imageUrl: `data:image/svg+xml,${id}`,
+    prompt,
+    createdAt: `2026-01-0${batchNumber}T00:00:00.000Z`,
+    selected: false,
+    parentVersionId: null,
+    generationBatchId: `batch-${batchNumber}`,
+    batchNumber,
+    optionIndex,
+    optionLabel: `Option ${String.fromCharCode(64 + optionIndex)}`,
+    aspectRatio,
+    compositionDirection: "Prototype direction",
+    visualSeed: `${id}-seed`,
+    status: "generated",
+  };
+}
+
+test("appends immutable batches newest first without deleting prior versions or prompts", () => {
+  let creation = createDefaultPageCreationState();
+  creation.prompt.automaticPrompt = "Exact prompt";
+  const first = [1, 2, 3].map((optionIndex) =>
+    imageVersion({ id: `first-${optionIndex}`, optionIndex }),
+  );
+  const second = [1, 2, 3].map((optionIndex) =>
+    imageVersion({
+      id: `second-${optionIndex}`,
+      batchNumber: 2,
+      optionIndex,
+      aspectRatio: "16:9",
+    }),
+  );
+
+  creation = appendImageGenerationBatch(creation, first);
+  creation = appendImageGenerationBatch(creation, second);
+  const batches = getImageGenerationBatches(creation.imageVersions);
+
+  assert.equal(creation.imageVersions.length, 6);
+  assert.deepEqual(batches.map((batch) => batch.batchNumber), [2, 1]);
+  assert.equal(batches[1].versions[0].aspectRatio, "3:4");
+  assert.ok(creation.imageVersions.every((version) => version.prompt === "Exact prompt"));
+});
+
+test("selects exactly one version across history and preserves every candidate", () => {
+  const allVersions = [
+    ...[1, 2, 3].map((optionIndex) => imageVersion({ id: `first-${optionIndex}`, optionIndex })),
+    ...[1, 2, 3].map((optionIndex) =>
+      imageVersion({ id: `second-${optionIndex}`, batchNumber: 2, optionIndex }),
+    ),
+  ];
+  let creation = appendImageGenerationBatch(createDefaultPageCreationState(), allVersions);
+  creation = selectImageVersion(creation, "first-2");
+  creation = selectImageVersion(creation, "second-3");
+
+  assert.equal(creation.imageVersions.length, 6);
+  assert.deepEqual(
+    creation.imageVersions.filter((version) => version.selected).map((version) => version.id),
+    ["second-3"],
+  );
+  assert.equal(creation.illustrationStatus, "direction_selected");
+});
+
+test("keeps generation history isolated by page and historical ratios immutable", () => {
+  const firstPage = appendImageGenerationBatch(createDefaultPageCreationState(), [
+    imageVersion({ id: "page-one", pageId: "page-1", aspectRatio: "1:1" }),
+  ]);
+  const secondPage = createDefaultPageCreationState();
+  const updatedSettings = {
+    ...firstPage,
+    settings: { ...firstPage.settings, aspectRatio: "16:9" },
+  };
+
+  assert.equal(updatedSettings.imageVersions[0].aspectRatio, "1:1");
+  assert.equal(secondPage.imageVersions.length, 0);
+  assert.equal(updatedSettings.imageVersions[0].pageId, "page-1");
 });

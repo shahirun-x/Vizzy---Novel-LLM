@@ -5,13 +5,16 @@ import { answerOnboardingQuestion, createProject } from "@/lib/onboarding";
 import { buildIllustrationPrompt } from "@/lib/illustration-prompt";
 import {
   addVisualReference,
+  appendImageGenerationBatch,
   canOpenPageCreation,
   createPageChatMessage,
   getAdjacentPageBeatId,
+  getImageGenerationBatches,
   normalizePageCreationState,
   removeVisualReference,
   resetEditedPrompt,
   saveEditedPrompt,
+  selectImageVersion,
 } from "@/lib/page-creation";
 import {
   EMPTY_STUDIO_STATE,
@@ -28,6 +31,8 @@ import {
   movePageBeat as moveBeat,
   updatePageBeat as updateBeat,
 } from "@/lib/story-planner";
+import { ImageGenerationError } from "@/services/image-generation";
+import { MockImageGenerationService } from "@/services/mock-image-generation";
 import type {
   PageBeat,
   PageCreativeSettings,
@@ -41,6 +46,7 @@ export type { StudioView } from "@/lib/project-storage";
 const STORAGE_KEY = "vizzy:studio-state";
 const STORE_EVENT = "vizzy:studio-state-change";
 const EMPTY_SNAPSHOT = JSON.stringify(EMPTY_STUDIO_STATE);
+const imageGenerationService = new MockImageGenerationService();
 
 function subscribe(listener: () => void) {
   const handleStorage = (event: StorageEvent) => {
@@ -100,6 +106,7 @@ function updateProjectPageCreation(
   project: Project,
   pageBeatId: string,
   updater: (creation: PageBeat["creation"]) => PageBeat["creation"],
+  refreshPrompt = true,
 ) {
   if (!project.storyPlan) return project;
 
@@ -112,16 +119,23 @@ function updateProjectPageCreation(
         if (page.id !== pageBeatId) return page;
         const creation = updater(normalizePageCreationState(page.creation));
         const preparedPage = { ...page, creation };
-        const automaticPrompt = buildIllustrationPrompt(project, preparedPage);
+        const automaticPrompt = refreshPrompt
+          ? buildIllustrationPrompt(project, preparedPage)
+          : creation.prompt.automaticPrompt;
         return {
           ...preparedPage,
           creation: {
             ...creation,
-            illustrationStatus: "prompt_ready" as const,
+            illustrationStatus:
+              refreshPrompt && creation.illustrationStatus === "not_started"
+                ? ("prompt_ready" as const)
+                : creation.illustrationStatus,
             prompt: {
               ...creation.prompt,
               automaticPrompt,
-              updatedAt: new Date().toISOString(),
+              updatedAt: refreshPrompt
+                ? new Date().toISOString()
+                : creation.prompt.updatedAt,
             },
           },
         };
@@ -168,7 +182,7 @@ export function useProjectStore() {
     const project = createProject();
     updateState((current) => ({
       ...current,
-      version: 3,
+      version: 4,
       projects: [...current.projects, project],
       selectedProjectId: project.id,
       activeView: "story",
@@ -479,6 +493,179 @@ export function useProjectStore() {
     [updateState],
   );
 
+  const generatePageVisualOptions = useCallback(
+    async (pageBeatId: string) => {
+      const current = parseStudioSnapshot(getClientSnapshot());
+      const project = current.projects.find(
+        (candidate) => candidate.id === current.selectedProjectId,
+      );
+      const page = project?.storyPlan?.pageBeats.find((candidate) => candidate.id === pageBeatId);
+      if (!project || !page || page.status !== "approved") {
+        throw new ImageGenerationError(
+          "INVALID_REQUEST",
+          "Only an approved page can prepare visual options.",
+        );
+      }
+
+      const creation = normalizePageCreationState(page.creation);
+      const prompt =
+        creation.prompt.mode === "edited"
+          ? creation.prompt.editedPrompt?.trim()
+          : creation.prompt.automaticPrompt.trim();
+      if (!prompt) {
+        throw new ImageGenerationError(
+          "INVALID_REQUEST",
+          "Prepare the page prompt before generating visual options.",
+        );
+      }
+
+      const batches = getImageGenerationBatches(creation.imageVersions);
+      const batchNumber = Math.max(0, ...batches.map((batch) => batch.batchNumber)) + 1;
+
+      updateState((stateBeforeGeneration) => {
+        const activeProject = stateBeforeGeneration.projects.find(
+          (candidate) => candidate.id === project.id,
+        );
+        return activeProject
+          ? replaceProject(
+              stateBeforeGeneration,
+              updateProjectPageCreation(
+                activeProject,
+                pageBeatId,
+                (activeCreation) => ({
+                  ...activeCreation,
+                  illustrationStatus: "generating",
+                }),
+                false,
+              ),
+            )
+          : stateBeforeGeneration;
+      });
+
+      try {
+        const result = await imageGenerationService.generate({
+          projectId: project.id,
+          pageId: page.id,
+          prompt,
+          aspectRatio: creation.settings.aspectRatio,
+          optionCount: 3,
+          batchNumber,
+          styleBible: project.styleBible,
+          references: creation.references,
+        });
+
+        updateState((stateAfterGeneration) => {
+          const activeProject = stateAfterGeneration.projects.find(
+            (candidate) => candidate.id === project.id,
+          );
+          if (!activeProject) return stateAfterGeneration;
+          return replaceProject(
+            stateAfterGeneration,
+            updateProjectPageCreation(
+              activeProject,
+              pageBeatId,
+              (activeCreation) => {
+                const nextCreation = appendImageGenerationBatch(activeCreation, result.versions);
+                return {
+                  ...nextCreation,
+                  chatHistory: [
+                    ...nextCreation.chatHistory,
+                    createPageChatMessage(
+                      "assistant",
+                      batchNumber === 1
+                        ? "Three prototype visual directions are ready. Choose the composition you'd like to develop further."
+                        : "I created another set of prototype visual directions while keeping your earlier versions available.",
+                    ),
+                  ],
+                };
+              },
+              false,
+            ),
+          );
+        });
+      } catch (error) {
+        updateState((stateAfterError) => {
+          const activeProject = stateAfterError.projects.find(
+            (candidate) => candidate.id === project.id,
+          );
+          if (!activeProject) return stateAfterError;
+          return replaceProject(
+            stateAfterError,
+            updateProjectPageCreation(
+              activeProject,
+              pageBeatId,
+              (activeCreation) => ({
+                ...activeCreation,
+                illustrationStatus: activeCreation.imageVersions.some(
+                  (version) => version.selected,
+                )
+                  ? "direction_selected"
+                  : activeCreation.imageVersions.length
+                    ? "options_ready"
+                    : "prompt_ready",
+                chatHistory: [
+                  ...activeCreation.chatHistory,
+                  createPageChatMessage(
+                    "assistant",
+                    "The prototype visual service couldn't prepare this set. Your prompt and earlier versions are unchanged.",
+                  ),
+                ],
+              }),
+              false,
+            ),
+          );
+        });
+        throw error instanceof ImageGenerationError
+          ? error
+          : new ImageGenerationError(
+              "GENERATION_FAILED",
+              "The prototype visual service could not prepare this set.",
+            );
+      }
+    },
+    [updateState],
+  );
+
+  const selectPageImageVersion = useCallback(
+    (pageBeatId: string, versionId: string) => {
+      updateState((current) => {
+        const project = current.projects.find(
+          (candidate) => candidate.id === current.selectedProjectId,
+        );
+        const page = project?.storyPlan?.pageBeats.find(
+          (candidate) => candidate.id === pageBeatId,
+        );
+        const version = page?.creation.imageVersions.find(
+          (candidate) => candidate.id === versionId,
+        );
+        if (!project || !version) return current;
+
+        return replaceProject(
+          current,
+          updateProjectPageCreation(
+            project,
+            pageBeatId,
+            (creation) => {
+              const selectedCreation = selectImageVersion(creation, versionId);
+              return {
+                ...selectedCreation,
+                chatHistory: [
+                  ...selectedCreation.chatHistory,
+                  createPageChatMessage(
+                    "assistant",
+                    `${version.optionLabel} is now your selected direction. We can refine this prototype visual next.`,
+                  ),
+                ],
+              };
+            },
+            false,
+          ),
+        );
+      });
+    },
+    [updateState],
+  );
+
   const updatePageBeat = useCallback(
     (
       pageBeatId: string,
@@ -619,6 +806,8 @@ export function useProjectStore() {
     addPageReference,
     removePageReference,
     addPageInstruction,
+    generatePageVisualOptions,
+    selectPageImageVersion,
     updatePageBeat,
     addPageBeat,
     deletePageBeat,

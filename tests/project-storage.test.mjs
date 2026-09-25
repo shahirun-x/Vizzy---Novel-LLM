@@ -55,7 +55,7 @@ test("migrates a Sprint 1.1 version-1 envelope without losing project data", () 
     activeView: "story",
   });
 
-  assert.equal(migrated.version, 3);
+  assert.equal(migrated.version, 4);
   assert.equal(migrated.projects[0].title, "Existing Story");
   assert.equal(migrated.projects[0].description, sprint11Project.description);
   assert.equal(migrated.projects[0].styleBible.artStyle, "Watercolour");
@@ -97,7 +97,7 @@ test("migrates and restores a version-2 planning state with page creation defaul
   version2.version = 2;
 
   const restored = parseStudioSnapshot(JSON.stringify(version2));
-  assert.equal(restored.version, 3);
+  assert.equal(restored.version, 4);
   assert.equal(restored.activeView, "planning");
   assert.equal(restored.projects[0].selectedPageBeatId, "beat-2");
   assert.equal(restored.projects[0].storyPlan.id, "plan-1");
@@ -153,4 +153,74 @@ test("preserves version-3 page prompt, references, chat, and selected workspace"
   assert.equal(restored.projects[0].selectedPageBeatId, "beat-3");
   assert.equal(creation.prompt.editedPrompt, "Saved edit");
   assert.equal(creation.chatHistory[0].content, "Keep the rain");
+});
+
+test("migrates legacy image history and preserves complete version-4 batch metadata", () => {
+  const migrated = migrateStudioState({
+    version: 3,
+    projects: [
+      {
+        ...sprint11Project,
+        selectedPageBeatId: "beat-images",
+        planningChatHistory: [],
+        storyPlan: {
+          id: "plan-images",
+          projectId: "legacy-project",
+          synopsis: "A visual scene",
+          targetPageCount: 1,
+          status: "approved",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+          pageBeats: [
+            {
+              id: "beat-images",
+              storyPlanId: "plan-images",
+              order: 1,
+              title: "Visual",
+              description: "A visual scene",
+              visualDirection: "Wide",
+              narration: "",
+              dialogue: "",
+              status: "approved",
+              creation: {
+                ...pageCreation.createDefaultPageCreationState(),
+                settings: {
+                  ...pageCreation.createDefaultCreativeSettings(),
+                  aspectRatio: "16:9",
+                },
+                imageVersions: [
+                  {
+                    id: "legacy-image",
+                    pageId: "beat-images",
+                    imageUrl: "data:image/svg+xml,legacy",
+                    prompt: "Exact legacy prompt",
+                    createdAt: "2026-01-01T00:00:00.000Z",
+                    selected: true,
+                    parentVersionId: null,
+                    generationBatchId: "batch-one",
+                    status: "selected",
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+    ],
+    selectedProjectId: "legacy-project",
+    activeView: "page_creation",
+  });
+
+  const image = migrated.projects[0].storyPlan.pageBeats[0].creation.imageVersions[0];
+  assert.equal(migrated.version, 4);
+  assert.equal(image.prompt, "Exact legacy prompt");
+  assert.equal(image.aspectRatio, "16:9");
+  assert.equal(image.batchNumber, 1);
+  assert.equal(image.optionLabel, "Option A");
+
+  const restored = parseStudioSnapshot(JSON.stringify(migrated));
+  assert.deepEqual(
+    restored.projects[0].storyPlan.pageBeats[0].creation.imageVersions,
+    migrated.projects[0].storyPlan.pageBeats[0].creation.imageVersions,
+  );
 });

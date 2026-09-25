@@ -2,6 +2,8 @@
 
 import { useState, type FormEvent } from "react";
 import { Icon } from "@/components/ui/icon";
+import Image from "next/image";
+import { VisualGenerationPanel } from "@/components/storyboard/visual-generation-panel";
 import { getOutputTypeLabel } from "@/lib/onboarding";
 import type {
   PageBeat,
@@ -23,6 +25,8 @@ interface PageCreationWorkspaceProps {
     reference: Pick<VisualReferenceMetadata, "title" | "url" | "description" | "purpose">,
   ) => void;
   onRemoveReference: (referenceId: string) => void;
+  onGenerateVisuals: () => Promise<void>;
+  onSelectImageVersion: (versionId: string) => void;
 }
 
 const fieldClass =
@@ -223,15 +227,32 @@ export function PageCreationWorkspace({
   onResetPrompt,
   onAddReference,
   onRemoveReference,
+  onGenerateVisuals,
+  onSelectImageVersion,
 }: PageCreationWorkspaceProps) {
   const pages = [...(project.storyPlan?.pageBeats ?? [])].sort((a, b) => a.order - b.order);
   const pageIndex = pages.findIndex((candidate) => candidate.id === page.id);
   const aspectClass =
-    page.creation.settings.aspectRatio === "16:9"
+    (page.creation.imageVersions.find((version) => version.selected)?.aspectRatio ??
+      page.creation.imageVersions.at(-1)?.aspectRatio ??
+      page.creation.settings.aspectRatio) === "16:9"
       ? "aspect-video"
-      : page.creation.settings.aspectRatio === "1:1"
+      : (page.creation.imageVersions.find((version) => version.selected)?.aspectRatio ??
+            page.creation.imageVersions.at(-1)?.aspectRatio ??
+            page.creation.settings.aspectRatio) === "1:1"
         ? "aspect-square"
         : "aspect-[3/4]";
+  const previewVersion =
+    page.creation.imageVersions.find((version) => version.selected) ??
+    page.creation.imageVersions.at(-3);
+  const statusLabel = {
+    not_started: "Not started",
+    prompt_ready: "Prepared",
+    generating: "Preparing options",
+    options_ready: "Options generated",
+    direction_selected: "Direction selected",
+    approved: "Approved",
+  }[page.creation.illustrationStatus];
 
   return (
     <div className="relative z-10 mx-auto w-full max-w-[900px] pb-8">
@@ -261,16 +282,25 @@ export function PageCreationWorkspace({
                 <p className="text-[8px] font-bold uppercase tracking-[0.15em] text-[#777fd7]">Page {page.order} · {getOutputTypeLabel(project.outputType)}</p>
                 <h2 className="mt-1.5 truncate font-serif text-[23px] tracking-[-0.03em] text-[#292a27]">{page.title}</h2>
               </div>
-              <span className="shrink-0 rounded-full bg-[#dce6d4] px-2.5 py-1.5 text-[7px] font-bold uppercase tracking-[0.11em] text-[#607251]">Prompt ready</span>
+              <span className="shrink-0 rounded-full bg-[#dce6d4] px-2.5 py-1.5 text-[7px] font-bold uppercase tracking-[0.11em] text-[#607251]">{statusLabel}</span>
             </div>
 
             <div className="mt-4 grid place-items-center rounded-xl bg-[#20211f] p-5 sm:p-7">
               <div className={`grid max-h-[440px] w-full max-w-[360px] place-items-center overflow-hidden rounded-lg border border-dashed border-white/15 bg-[radial-gradient(circle_at_50%_35%,rgba(124,131,218,.16),transparent_45%),linear-gradient(145deg,#292a27,#171816)] ${aspectClass}`}>
+              {previewVersion ? (
+                <div className="relative h-full w-full">
+                  <Image src={previewVersion.imageUrl} alt={`${previewVersion.optionLabel} prototype visual`} fill sizes="360px" unoptimized className="object-cover" />
+                  <span className="absolute left-3 top-3 rounded-full bg-black/55 px-2.5 py-1.5 text-[7px] font-bold uppercase tracking-[0.12em] text-white backdrop-blur-sm">
+                    {previewVersion.selected ? "Selected direction" : "Latest prototype"}
+                  </span>
+                </div>
+              ) : (
                 <div className="px-6 text-center">
                   <div className="mx-auto grid h-10 w-10 place-items-center rounded-xl border border-white/10 bg-white/[0.04] text-[#8b8fce]"><Icon name="sparkles" size={18} /></div>
                   <p className="mt-3 text-[10px] font-semibold text-[#d5d4cf]">No illustration yet</p>
-                  <p className="mt-1.5 text-[8px] leading-relaxed text-[#74756f]">Image generation begins in Sprint 1.3B. This workspace prepares everything it will need.</p>
+                  <p className="mt-1.5 text-[8px] leading-relaxed text-[#74756f]">Generate three local prototype compositions from the prepared prompt.</p>
                 </div>
+              )}
               </div>
             </div>
 
@@ -303,6 +333,14 @@ export function PageCreationWorkspace({
             </fieldset>
           </div>
         </section>
+      </div>
+
+      <div className="mt-5">
+        <VisualGenerationPanel
+          page={page}
+          onGenerate={onGenerateVisuals}
+          onSelect={onSelectImageVersion}
+        />
       </div>
 
       <div className="mt-5 grid gap-5 xl:grid-cols-2">

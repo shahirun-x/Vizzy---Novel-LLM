@@ -9,6 +9,14 @@ interface PagesWorkspaceProps {
 
 export function PagesWorkspace({ project, onOpenPlanning, onSelectPage }: PagesWorkspaceProps) {
   const plan = project.storyPlan;
+  const statusLabels = {
+    not_started: "Ready for visuals",
+    prompt_ready: "Prepared",
+    generating: "Preparing options",
+    options_ready: "Options generated",
+    direction_selected: "Direction selected",
+    approved: "Approved",
+  } as const;
 
   if (!plan || plan.status !== "approved") {
     return (
@@ -56,7 +64,7 @@ export function PagesWorkspace({ project, onOpenPlanning, onSelectPage }: PagesW
                 {String(page.order).padStart(2, "0")}
               </span>
               <span className="rounded-full bg-[#dce6d4] px-2 py-1 text-[7px] font-bold uppercase tracking-wide text-[#607251]">
-                {page.creation.illustrationStatus === "not_started" ? "Ready for visuals" : "Prompt ready"}
+                {statusLabels[page.creation.illustrationStatus]}
               </span>
             </div>
             <h3 className="mt-3 truncate text-[11px] font-semibold text-[#34342f]">{page.title}</h3>

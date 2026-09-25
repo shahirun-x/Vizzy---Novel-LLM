@@ -11,8 +11,24 @@ export interface GeneratePageImagesRequest {
   prompt: string;
   aspectRatio: PageAspectRatio;
   optionCount: number;
+  batchNumber: number;
   styleBible: VisualStyleBible;
   references: VisualReferenceMetadata[];
+}
+
+export type ImageGenerationErrorCode =
+  | "INVALID_REQUEST"
+  | "GENERATION_FAILED"
+  | "NOT_IMPLEMENTED";
+
+export class ImageGenerationError extends Error {
+  constructor(
+    public readonly code: ImageGenerationErrorCode,
+    message: string,
+  ) {
+    super(message);
+    this.name = "ImageGenerationError";
+  }
 }
 
 export interface RefinePageImageRequest {

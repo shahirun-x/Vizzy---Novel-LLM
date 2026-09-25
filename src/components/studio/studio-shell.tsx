@@ -27,6 +27,8 @@ export function StudioShell() {
     addPageReference,
     removePageReference,
     addPageInstruction,
+    generatePageVisualOptions,
+    selectPageImageVersion,
     updatePageBeat,
     addPageBeat,
     deletePageBeat,
@@ -122,6 +124,8 @@ export function StudioShell() {
         onResetPagePrompt={resetPagePrompt}
         onAddPageReference={addPageReference}
         onRemovePageReference={removePageReference}
+        onGeneratePageVisuals={generatePageVisualOptions}
+        onSelectPageImageVersion={selectPageImageVersion}
         onUpdatePage={updatePageBeat}
         onAddPage={addPageBeat}
         onDeletePage={deletePageBeat}

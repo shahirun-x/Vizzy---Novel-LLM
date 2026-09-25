@@ -10,14 +10,14 @@ export type StudioView =
   | "page_creation";
 
 export interface PersistedStudioState {
-  version: 3;
+  version: 4;
   projects: Project[];
   selectedProjectId: string | null;
   activeView: StudioView;
 }
 
 export const EMPTY_STUDIO_STATE: PersistedStudioState = {
-  version: 3,
+  version: 4,
   projects: [],
   selectedProjectId: null,
   activeView: "story",
@@ -62,12 +62,12 @@ export function migrateStudioState(value: unknown): PersistedStudioState {
     selectedProjectId?: unknown;
     activeView?: unknown;
   };
-  if (![1, 2, 3].includes(candidate.version ?? -1) || !Array.isArray(candidate.projects)) {
+  if (![1, 2, 3, 4].includes(candidate.version ?? -1) || !Array.isArray(candidate.projects)) {
     return EMPTY_STUDIO_STATE;
   }
 
   return {
-    version: 3,
+    version: 4,
     projects: candidate.projects.map(migrateProject),
     selectedProjectId:
       typeof candidate.selectedProjectId === "string" ? candidate.selectedProjectId : null,

@@ -34,6 +34,8 @@ interface WorkspaceCanvasProps {
     reference: Pick<VisualReferenceMetadata, "title" | "url" | "description" | "purpose">,
   ) => void;
   onRemovePageReference: (pageBeatId: string, referenceId: string) => void;
+  onGeneratePageVisuals: (pageBeatId: string) => Promise<void>;
+  onSelectPageImageVersion: (pageBeatId: string, versionId: string) => void;
   onUpdatePage: (
     pageBeatId: string,
     updates: Partial<
@@ -218,6 +220,8 @@ export function WorkspaceCanvas({
   onResetPagePrompt,
   onAddPageReference,
   onRemovePageReference,
+  onGeneratePageVisuals,
+  onSelectPageImageVersion,
   onUpdatePage,
   onAddPage,
   onDeletePage,
@@ -311,6 +315,7 @@ export function WorkspaceCanvas({
           />
         ) : activeView === "page_creation" && selectedPage ? (
           <PageCreationWorkspace
+            key={selectedPage.id}
             project={project}
             page={selectedPage}
             onBack={() => onSelectView("pages")}
@@ -323,6 +328,10 @@ export function WorkspaceCanvas({
             onAddReference={(reference) => onAddPageReference(selectedPage.id, reference)}
             onRemoveReference={(referenceId) =>
               onRemovePageReference(selectedPage.id, referenceId)
+            }
+            onGenerateVisuals={() => onGeneratePageVisuals(selectedPage.id)}
+            onSelectImageVersion={(versionId) =>
+              onSelectPageImageVersion(selectedPage.id, versionId)
             }
           />
         ) : activeView === "story" && project.onboarding.status === "complete" ? (

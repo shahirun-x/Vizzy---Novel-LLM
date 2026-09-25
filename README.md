@@ -4,7 +4,7 @@ Vizzy is a conversational creative studio for making graphic novels, storyboards
 
 ## Current status
 
-Vizzy is a working Sprint 1.3A prototype. It supports:
+Vizzy is a working Sprint 1.3B prototype. It supports:
 
 - Multiple local projects
 - Deterministic chat-based creative onboarding
@@ -18,10 +18,13 @@ Vizzy is a working Sprint 1.3A prototype. It supports:
 - Page-specific camera, shot, lighting, composition, tone, instruction, and aspect-ratio controls
 - Deterministic automatic illustration prompts with explicit edit, save, and reset states
 - Page-scoped visual-reference metadata and conversational visual notes
-- A provider-independent image-generation service contract for the next sprint
+- A provider-independent image-generation service contract with a deterministic local mock
+- Three visibly distinct prototype visual directions per generation batch
+- Explicit direction selection and page-isolated, newest-first version history
+- Immutable prompt, aspect-ratio, batch, composition, and seed metadata per visual
 - Versioned browser-local persistence
 
-The prototype intentionally has no real AI provider, image generation, authentication, database, billing, slideshow export, or production story-planning service.
+The prototype intentionally has no external AI or image provider, authentication, database, billing, slideshow export, or production story-planning service. All displayed visuals are clearly labelled local SVG demo compositions.
 
 ## Stack
 
@@ -89,6 +92,8 @@ The App Router page remains a Server Component. `StudioShell` is the explicit cl
 10. Open any approved beat in the Pages workspace.
 11. Tune page-specific visual settings and review the prepared illustration prompt.
 12. Save a deliberate prompt edit, add visual-reference metadata, or leave page notes through chat.
+13. Generate exactly three local prototype visual directions and select one direction.
+14. Generate additional batches while retaining and inspecting every earlier version.
 
 Editing, adding, deleting, or reordering an approved plan returns it to draft and requires reapproval.
 
@@ -123,7 +128,7 @@ One `PageBeat` represents one future illustrated page and contains:
 - Page-specific creative settings and illustration status
 - Automatic and user-edited prompt state
 - Visual-reference metadata and a dedicated page conversation
-- Empty future image-version history
+- Page-isolated image-version history with stable batch and option metadata
 
 Nested comic-panel modeling remains intentionally out of scope.
 
@@ -131,7 +136,7 @@ Nested comic-panel modeling remains intentionally out of scope.
 
 The complete prototype state is stored in browser `localStorage` under `vizzy:studio-state`. `useProjectStore` is the only browser-storage boundary. It persists projects, selection, workspace view, onboarding, Style Bible, chat histories, story plans, page edits and ordering, approval state, selected page, page creative settings, prepared prompts, reference metadata, and page conversations.
 
-The storage envelope is now version 3. `src/lib/project-storage.ts` accepts version-1 and version-2 snapshots, adds missing planning or page-creation fields, and preserves existing story, style, character, selection, chat, plan, and page data. Migrated state is written as version 3 on the next state change.
+The storage envelope is now version 4. `src/lib/project-storage.ts` accepts version-1 through version-4 snapshots, adds missing planning, page-creation, or visual-version fields, and preserves existing story, style, character, selection, chat, plan, page, and generation-history data. Migrated state is written as version 4 on the next state change.
 
 `useSyncExternalStore` supplies a server-safe snapshot, so browser APIs are not read during server rendering.
 
@@ -143,14 +148,14 @@ Data remains local to the current browser profile and device. Clearing site data
 - The planner recognizes structured sequences through numbered or bulleted lines; it does not deeply interpret scripts.
 - Plans are limited to 30 pages for prototype usability.
 - Page cards represent full illustrated pages, not nested comic panels.
-- Approved pages contain no generated images; each page shows an honest empty preview.
+- Generated visuals are deterministic local SVG prototypes, not production artwork or provider output.
 - Reference entries store metadata and external links only, not binaries or base64 payloads.
 - Page chat preserves instructions verbatim and does not attempt semantic interpretation.
 - There is no cloud sync, collaboration, authentication, or database.
 
 ## Planned architecture
 
-`src/services/image-generation.ts` defines the future provider boundary for initial generation, multiple options, references, Style Bible context, and parent-version refinement. Sprint 1.3A intentionally provides no implementation, SDK, route, or generated image. Sprint 1.3B can implement that contract while consuming only approved page beats.
+`src/services/image-generation.ts` defines the provider boundary for initial generation, multiple options, references, Style Bible context, and future parent-version refinement. `src/services/mock-image-generation.ts` implements only the initial three-option flow with deterministic local SVG visuals. A future provider can replace that service without changing the page history model or UI contract.
 
 ## Environment
 

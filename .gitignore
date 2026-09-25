@@ -4,6 +4,8 @@
 # Next.js build output
 /.next/
 /out/
+/.turbo/
+/coverage/
 
 # production output
 /build
