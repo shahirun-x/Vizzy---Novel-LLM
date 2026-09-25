@@ -47,6 +47,18 @@ const sprint11Project = {
   chatHistory: [],
 };
 
+test("preserves the visual-book reader workspace without changing the storage schema", () => {
+  const migrated = migrateStudioState({
+    version: 5,
+    projects: [sprint11Project],
+    selectedProjectId: "legacy-project",
+    activeView: "reader",
+  });
+
+  assert.equal(migrated.version, 5);
+  assert.equal(migrated.activeView, "reader");
+});
+
 test("migrates a Sprint 1.1 version-1 envelope without losing project data", () => {
   const migrated = migrateStudioState({
     version: 1,

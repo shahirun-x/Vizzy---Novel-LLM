@@ -2,6 +2,7 @@ import { PagesWorkspace } from "@/components/storyboard/pages-workspace";
 import { PageCreationWorkspace } from "@/components/storyboard/page-creation-workspace";
 import { StoryPlanningPanel } from "@/components/storyboard/story-planning-panel";
 import { StyleBiblePanel } from "@/components/storyboard/style-bible-panel";
+import { VisualBookReader } from "@/components/storyboard/visual-book-reader";
 import { Icon } from "@/components/ui/icon";
 import type { StudioView } from "@/hooks/use-project-store";
 import { getOutputTypeLabel, ONBOARDING_STEP_ORDER } from "@/lib/onboarding";
@@ -262,14 +263,16 @@ export function WorkspaceCanvas({
                     ? selectedPage
                       ? `Page ${selectedPage.order} visual development`
                       : "Page visual development"
-                  : project
-                    ? getOutputTypeLabel(project.outputType)
-                    : "Local creative workspace"}
+                    : activeView === "reader"
+                      ? "Visual book reader"
+                      : project
+                        ? getOutputTypeLabel(project.outputType)
+                        : "Local creative workspace"}
           </p>
         </div>
         {project && (
           <div className="flex items-center gap-2">
-            {project.onboarding.status === "complete" && !["planning", "page_creation"].includes(activeView) && (
+            {project.onboarding.status === "complete" && !["planning", "page_creation", "reader"].includes(activeView) && (
               <button
                 type="button"
                 onClick={() => onSelectView("planning")}
@@ -278,7 +281,7 @@ export function WorkspaceCanvas({
                 Story plan
               </button>
             )}
-            {activeView !== "style_bible" && (
+            {!['style_bible', 'reader'].includes(activeView) && (
               <button
                 type="button"
                 onClick={() => onSelectView("style_bible")}
@@ -291,7 +294,7 @@ export function WorkspaceCanvas({
         )}
       </header>
 
-      <div className={`studio-scrollbar relative flex min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-7 max-[1180px]:p-6 ${["style_bible", "planning", "pages", "page_creation"].includes(activeView) ? "items-start" : "items-center justify-center"}`}>
+      <div className={`studio-scrollbar relative flex min-h-0 flex-1 overflow-y-auto overflow-x-hidden ${activeView === "reader" ? "p-3" : "p-7 max-[1180px]:p-6"} ${["style_bible", "planning", "pages", "page_creation", "reader"].includes(activeView) ? "items-start" : "items-center justify-center"}`}>
         <div className="pointer-events-none absolute inset-0 opacity-[0.17] [background-image:linear-gradient(rgba(55,50,44,.13)_1px,transparent_1px),linear-gradient(90deg,rgba(55,50,44,.13)_1px,transparent_1px)] [background-size:24px_24px]" />
 
         {!project ? (
@@ -318,6 +321,13 @@ export function WorkspaceCanvas({
             onSelectPage={(pageBeatId) => {
               onOpenPageCreation(pageBeatId);
             }}
+            onPreview={() => onSelectView("reader")}
+          />
+        ) : activeView === "reader" ? (
+          <VisualBookReader
+            project={project}
+            onClose={() => onSelectView("pages")}
+            onOpenPage={onOpenPageCreation}
           />
         ) : activeView === "page_creation" && selectedPage ? (
           <PageCreationWorkspace

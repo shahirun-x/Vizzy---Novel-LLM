@@ -82,7 +82,7 @@ export function StudioShell() {
                     selectedProject.storyPlan?.status === "approved" ? "pages" : "planning",
                   )
                 }
-                className={`grid h-9 w-9 place-items-center rounded-lg ${["planning", "pages", "page_creation"].includes(activeView) ? "bg-white/[0.1] text-white" : "text-[#7f807a]"}`}
+                className={`grid h-9 w-9 place-items-center rounded-lg ${["planning", "pages", "page_creation", "reader"].includes(activeView) ? "bg-white/[0.1] text-white" : "text-[#7f807a]"}`}
                 aria-label={
                   selectedProject.storyPlan?.status === "approved"
                     ? "Approved pages"

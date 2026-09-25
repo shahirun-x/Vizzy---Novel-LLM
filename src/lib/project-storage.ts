@@ -7,7 +7,8 @@ export type StudioView =
   | "characters"
   | "pages"
   | "planning"
-  | "page_creation";
+  | "page_creation"
+  | "reader";
 
 export interface PersistedStudioState {
   version: 5;
@@ -30,6 +31,7 @@ const VALID_VIEWS = new Set<StudioView>([
   "pages",
   "planning",
   "page_creation",
+  "reader",
 ]);
 
 function migrateProject(project: Project): Project {

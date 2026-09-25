@@ -1,15 +1,17 @@
 import { Icon } from "@/components/ui/icon";
 import Image from "next/image";
-import { getIllustrationProgress } from "@/lib/page-creation";
+import { getOutputTypeLabel } from "@/lib/onboarding";
+import { assembleVisualStory } from "@/lib/story-assembly";
 import type { Project } from "@/types/domain";
 
 interface PagesWorkspaceProps {
   project: Project;
   onOpenPlanning: () => void;
   onSelectPage: (pageBeatId: string) => void;
+  onPreview: () => void;
 }
 
-export function PagesWorkspace({ project, onOpenPlanning, onSelectPage }: PagesWorkspaceProps) {
+export function PagesWorkspace({ project, onOpenPlanning, onSelectPage, onPreview }: PagesWorkspaceProps) {
   const plan = project.storyPlan;
   const statusLabels = {
     not_started: "Ready for visuals",
@@ -39,7 +41,7 @@ export function PagesWorkspace({ project, onOpenPlanning, onSelectPage }: PagesW
     );
   }
 
-  const progress = getIllustrationProgress(plan);
+  const assembly = assembleVisualStory(project);
 
   return (
     <div className="relative z-10 mx-auto w-full max-w-[780px] py-3">
@@ -51,12 +53,33 @@ export function PagesWorkspace({ project, onOpenPlanning, onSelectPage }: PagesW
           </div>
           <h2 className="mt-2 font-serif text-[27px] tracking-[-0.035em] text-[#292a27]">Planned pages</h2>
           <p className="mt-1.5 text-[10px] text-[#777269]">
-            {progress.approved} of {progress.total} illustrations approved
+            {assembly.approvedIllustrations} of {assembly.totalPages} illustrations approved
           </p>
         </div>
-        <button type="button" onClick={onOpenPlanning} className="rounded-lg border border-[#5e594f]/15 bg-white/40 px-3 py-2 text-[9px] font-semibold text-[#5f5b54] hover:bg-white/70">
-          Revise story plan
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={onOpenPlanning} className="rounded-lg border border-[#5e594f]/15 bg-white/40 px-3 py-2 text-[9px] font-semibold text-[#5f5b54] hover:bg-white/70">
+            Revise story plan
+          </button>
+          <button type="button" onClick={onPreview} disabled={assembly.approvedIllustrations === 0} className="rounded-lg bg-[#282927] px-3.5 py-2 text-[9px] font-semibold text-white enabled:hover:bg-[#3b3c39] disabled:cursor-not-allowed disabled:opacity-45">
+            Preview visual book
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-5 grid gap-3 rounded-2xl border border-white/65 bg-[#f6f1e9]/80 p-4 sm:grid-cols-[1fr_auto]">
+        <div>
+          <p className="text-[8px] font-bold uppercase tracking-[0.14em] text-[#8b857c]">Story overview</p>
+          <p className="mt-2 text-[10px] leading-relaxed text-[#5f5b54]">{plan.synopsis || project.description}</p>
+          <p className="mt-2 text-[9px] text-[#777269]">{getOutputTypeLabel(project.outputType)} · {assembly.totalPages} pages</p>
+        </div>
+        <div className="min-w-36 sm:text-right">
+          <p className={`text-[9px] font-bold ${assembly.ready ? "text-[#607251]" : "text-[#9a6a32]"}`}>
+            {assembly.ready ? "Ready to present" : `${assembly.incompletePages} page${assembly.incompletePages === 1 ? "" : "s"} incomplete`}
+          </p>
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#ddd7ce]">
+            <div className="h-full rounded-full bg-[#777fd7]" style={{ width: `${assembly.totalPages ? (assembly.approvedIllustrations / assembly.totalPages) * 100 : 0}%` }} />
+          </div>
+        </div>
       </div>
 
       <div className="mt-6 grid gap-3 sm:grid-cols-2">
@@ -86,7 +109,7 @@ export function PagesWorkspace({ project, onOpenPlanning, onSelectPage }: PagesW
               </span>
             </div>
             <h3 className="mt-3 truncate text-[11px] font-semibold text-[#34342f]">{page.title}</h3>
-            <p className="mt-1.5 line-clamp-3 text-[9px] leading-relaxed text-[#777269]">{page.description}</p>
+            <p className="mt-1.5 line-clamp-3 text-[9px] leading-relaxed text-[#777269]">{page.narration || page.description}</p>
             <span className="mt-4 inline-flex rounded-lg bg-[#e6e1d8] px-3 py-2 text-[8px] font-semibold text-[#777269]">
               Open visual workspace
             </span>
