@@ -54,6 +54,8 @@ export function createDefaultPageCreationState(): PageCreationState {
     references: [],
     chatHistory: [],
     imageVersions: [],
+    approvedImageVersionId: null,
+    illustrationApprovedAt: null,
   };
 }
 
@@ -62,7 +64,7 @@ export function normalizePageCreationState(
 ): PageCreationState {
   const fallback = createDefaultPageCreationState();
   const settings = { ...fallback.settings, ...value?.settings };
-  const imageVersions = Array.isArray(value?.imageVersions)
+  const baseVersions = Array.isArray(value?.imageVersions)
     ? value.imageVersions.map((version, index) => ({
         ...version,
         parentVersionId: version.parentVersionId ?? null,
@@ -74,8 +76,35 @@ export function normalizePageCreationState(
         compositionDirection:
           version.compositionDirection ?? "Saved prototype visual direction.",
         visualSeed: version.visualSeed ?? `legacy-${version.id}`,
+        generationSource:
+          version.generationSource ?? (version.parentVersionId ? "refinement" : "generated"),
+        refinementInstruction: version.refinementInstruction ?? null,
+        refinementDepth: version.refinementDepth ?? (version.parentVersionId ? 1 : 0),
+        refinementSequence: version.refinementSequence ?? (version.parentVersionId ? index + 1 : 0),
       }))
     : [];
+  const versionLookup = new Map(baseVersions.map((version) => [version.id, version]));
+  function findRootVersionId(version: (typeof baseVersions)[number]) {
+    if (version.rootVersionId) return version.rootVersionId;
+    let current = version;
+    const visited = new Set<string>();
+    while (current.parentVersionId && !visited.has(current.id)) {
+      visited.add(current.id);
+      const parent = versionLookup.get(current.parentVersionId);
+      if (!parent) break;
+      current = parent;
+    }
+    return current.id;
+  }
+  const imageVersions = baseVersions.map((version) => ({
+    ...version,
+    rootVersionId: findRootVersionId(version),
+  }));
+  const approvedImageVersionId = imageVersions.some(
+    (version) => version.id === value?.approvedImageVersionId,
+  )
+    ? (value?.approvedImageVersionId ?? null)
+    : null;
 
   return {
     ...fallback,
@@ -85,6 +114,15 @@ export function normalizePageCreationState(
     references: Array.isArray(value?.references) ? value.references : [],
     chatHistory: Array.isArray(value?.chatHistory) ? value.chatHistory : [],
     imageVersions,
+    approvedImageVersionId,
+    illustrationApprovedAt: approvedImageVersionId
+      ? (value?.illustrationApprovedAt ?? null)
+      : null,
+    illustrationStatus: approvedImageVersionId
+      ? "illustration_approved"
+      : value?.illustrationStatus === "approved"
+        ? "direction_selected"
+        : (value?.illustrationStatus ?? fallback.illustrationStatus),
   };
 }
 
@@ -97,7 +135,9 @@ export interface ImageGenerationBatch {
 
 export function getImageGenerationBatches(imageVersions: ImageVersion[]) {
   const batches = new Map<string, ImageGenerationBatch>();
-  for (const version of imageVersions) {
+  for (const version of imageVersions.filter(
+    (candidate) => candidate.generationSource === "generated",
+  )) {
     const existing = batches.get(version.generationBatchId);
     if (existing) {
       existing.versions.push(version);
@@ -123,11 +163,51 @@ export function appendImageGenerationBatch(
   creation: PageCreationState,
   versions: ImageVersion[],
 ): PageCreationState {
-  const hasSelection = creation.imageVersions.some((version) => version.selected);
+  const selectedVersion = creation.imageVersions.find((version) => version.selected);
   return {
     ...creation,
-    illustrationStatus: hasSelection ? "direction_selected" : "options_ready",
+    illustrationStatus: creation.approvedImageVersionId
+      ? "illustration_approved"
+      : selectedVersion?.generationSource === "refinement"
+        ? "refining"
+        : selectedVersion
+          ? "direction_selected"
+          : "options_ready",
     imageVersions: [...creation.imageVersions, ...versions],
+  };
+}
+
+export function appendRefinedImageVersion(
+  creation: PageCreationState,
+  child: ImageVersion,
+): PageCreationState {
+  if (
+    child.generationSource !== "refinement" ||
+    !child.parentVersionId ||
+    !creation.imageVersions.some(
+      (version) => version.id === child.parentVersionId && version.pageId === child.pageId,
+    ) ||
+    creation.imageVersions.some((version) => version.id === child.id)
+  ) {
+    return creation;
+  }
+
+  return {
+    ...creation,
+    illustrationStatus: creation.approvedImageVersionId
+      ? "illustration_approved"
+      : "refining",
+    imageVersions: [
+      ...creation.imageVersions.map((version) => ({
+        ...version,
+        selected: false,
+        status:
+          version.id === creation.approvedImageVersionId
+            ? ("approved" as const)
+            : ("generated" as const),
+      })),
+      { ...child, selected: true, status: "selected" },
+    ],
   };
 }
 
@@ -139,27 +219,115 @@ export function selectImageVersion(
 
   return {
     ...creation,
-    illustrationStatus: "direction_selected",
+    illustrationStatus: creation.approvedImageVersionId
+      ? "illustration_approved"
+      : creation.imageVersions.find((version) => version.id === versionId)
+            ?.generationSource === "refinement"
+        ? "refining"
+        : "direction_selected",
     imageVersions: creation.imageVersions.map((version) => {
       const selected = version.id === versionId;
       return {
         ...version,
         selected,
-        status: selected ? "selected" : "generated",
+        status:
+          version.id === creation.approvedImageVersionId
+            ? "approved"
+            : selected
+              ? "selected"
+              : "generated",
       };
     }),
   };
+}
+
+export function approveSelectedImageVersion(
+  creation: PageCreationState,
+  approvedAt = new Date().toISOString(),
+): PageCreationState {
+  const selectedVersion = creation.imageVersions.find((version) => version.selected);
+  if (!selectedVersion) return creation;
+
+  return {
+    ...creation,
+    illustrationStatus: "illustration_approved",
+    approvedImageVersionId: selectedVersion.id,
+    illustrationApprovedAt: approvedAt,
+    imageVersions: creation.imageVersions.map((version) => ({
+      ...version,
+      status: version.id === selectedVersion.id ? "approved" : "generated",
+    })),
+  };
+}
+
+export function reopenIllustrationDevelopment(
+  creation: PageCreationState,
+): PageCreationState {
+  if (!creation.approvedImageVersionId) return creation;
+  const selectedVersion = creation.imageVersions.find((version) => version.selected);
+  return {
+    ...creation,
+    approvedImageVersionId: null,
+    illustrationApprovedAt: null,
+    illustrationStatus:
+      selectedVersion?.generationSource === "refinement" ? "refining" : "direction_selected",
+    imageVersions: creation.imageVersions.map((version) => ({
+      ...version,
+      status: version.selected ? "selected" : "generated",
+    })),
+  };
+}
+
+export interface ImageVersionLineageNode {
+  version: ImageVersion;
+  children: ImageVersionLineageNode[];
+}
+
+export function getImageVersionLineage(imageVersions: ImageVersion[]) {
+  const nodes = new Map<string, ImageVersionLineageNode>(
+    imageVersions.map((version) => [version.id, { version, children: [] }]),
+  );
+  const roots: ImageVersionLineageNode[] = [];
+  for (const version of imageVersions) {
+    const node = nodes.get(version.id);
+    if (!node) continue;
+    const parent = version.parentVersionId ? nodes.get(version.parentVersionId) : null;
+    if (parent) parent.children.push(node);
+    else roots.push(node);
+  }
+  const sortNodes = (items: ImageVersionLineageNode[]) => {
+    items.sort((a, b) =>
+      a.version.batchNumber - b.version.batchNumber ||
+      a.version.optionIndex - b.version.optionIndex ||
+      a.version.refinementSequence - b.version.refinementSequence,
+    );
+    items.forEach((item) => sortNodes(item.children));
+  };
+  sortNodes(roots);
+  return roots;
+}
+
+export function getIllustrationProgress(plan: StoryPlan | null) {
+  const pages = plan?.pageBeats ?? [];
+  const approved = pages.filter(
+    (page) => normalizePageCreationState(page.creation).approvedImageVersionId,
+  ).length;
+  return { approved, total: pages.length, complete: pages.length > 0 && approved === pages.length };
 }
 
 export function saveEditedPrompt(
   creation: PageCreationState,
   prompt: string,
 ): PageCreationState {
+  const selectedVersion = creation.imageVersions.find((version) => version.selected);
   return {
     ...creation,
-    illustrationStatus: creation.imageVersions.some((version) => version.selected)
-      ? "direction_selected"
-      : "prompt_ready",
+    illustrationStatus:
+      selectedVersion?.generationSource === "refinement"
+        ? "refining"
+        : selectedVersion
+          ? "direction_selected"
+          : "prompt_ready",
     prompt: {
       ...creation.prompt,
       editedPrompt: prompt.trim(),

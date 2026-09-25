@@ -34,10 +34,9 @@ export class ImageGenerationError extends Error {
 export interface RefinePageImageRequest {
   projectId: string;
   pageId: string;
-  parentVersionId: string;
-  prompt: string;
+  parentVersion: ImageVersion;
   refinementInstructions: string;
-  aspectRatio: PageAspectRatio;
+  refinementSequence: number;
   styleBible: VisualStyleBible;
   references: VisualReferenceMetadata[];
 }

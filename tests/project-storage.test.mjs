@@ -55,7 +55,7 @@ test("migrates a Sprint 1.1 version-1 envelope without losing project data", () 
     activeView: "story",
   });
 
-  assert.equal(migrated.version, 4);
+  assert.equal(migrated.version, 5);
   assert.equal(migrated.projects[0].title, "Existing Story");
   assert.equal(migrated.projects[0].description, sprint11Project.description);
   assert.equal(migrated.projects[0].styleBible.artStyle, "Watercolour");
@@ -97,7 +97,7 @@ test("migrates and restores a version-2 planning state with page creation defaul
   version2.version = 2;
 
   const restored = parseStudioSnapshot(JSON.stringify(version2));
-  assert.equal(restored.version, 4);
+  assert.equal(restored.version, 5);
   assert.equal(restored.activeView, "planning");
   assert.equal(restored.projects[0].selectedPageBeatId, "beat-2");
   assert.equal(restored.projects[0].storyPlan.id, "plan-1");
@@ -155,9 +155,9 @@ test("preserves version-3 page prompt, references, chat, and selected workspace"
   assert.equal(creation.chatHistory[0].content, "Keep the rain");
 });
 
-test("migrates legacy image history and preserves complete version-4 batch metadata", () => {
+test("migrates version-4 image history into version 5 without losing generated options", () => {
   const migrated = migrateStudioState({
-    version: 3,
+    version: 4,
     projects: [
       {
         ...sprint11Project,
@@ -212,15 +212,109 @@ test("migrates legacy image history and preserves complete version-4 batch metad
   });
 
   const image = migrated.projects[0].storyPlan.pageBeats[0].creation.imageVersions[0];
-  assert.equal(migrated.version, 4);
+  assert.equal(migrated.version, 5);
   assert.equal(image.prompt, "Exact legacy prompt");
   assert.equal(image.aspectRatio, "16:9");
   assert.equal(image.batchNumber, 1);
   assert.equal(image.optionLabel, "Option A");
+  assert.equal(image.rootVersionId, "legacy-image");
+  assert.equal(image.generationSource, "generated");
+  assert.equal(migrated.projects[0].storyPlan.pageBeats[0].creation.approvedImageVersionId, null);
 
   const restored = parseStudioSnapshot(JSON.stringify(migrated));
   assert.deepEqual(
     restored.projects[0].storyPlan.pageBeats[0].creation.imageVersions,
     migrated.projects[0].storyPlan.pageBeats[0].creation.imageVersions,
   );
+});
+
+test("version-5 refinement lineage and page approval survive serialization", () => {
+  const creation = pageCreation.createDefaultPageCreationState();
+  const original = {
+    id: "image-root",
+    pageId: "beat-refined",
+    imageUrl: "data:image/svg+xml,root",
+    prompt: "Saved prompt snapshot",
+    createdAt: "2026-09-25T10:00:00.000Z",
+    selected: false,
+    parentVersionId: null,
+    rootVersionId: "image-root",
+    generationBatchId: "batch-1",
+    batchNumber: 1,
+    optionIndex: 1,
+    optionLabel: "Option A",
+    aspectRatio: "3:4",
+    compositionDirection: "Original composition",
+    visualSeed: "root-seed",
+    generationSource: "generated",
+    refinementInstruction: null,
+    refinementDepth: 0,
+    refinementSequence: 0,
+    status: "generated",
+  };
+  const child = {
+    ...original,
+    id: "image-child",
+    imageUrl: "data:image/svg+xml,child",
+    selected: true,
+    parentVersionId: original.id,
+    rootVersionId: original.id,
+    optionLabel: "Option A.1",
+    visualSeed: "child-seed",
+    generationSource: "refinement",
+    refinementInstruction: "Make it colder",
+    refinementDepth: 1,
+    refinementSequence: 1,
+    status: "approved",
+  };
+  const snapshot = {
+    version: 5,
+    projects: [
+      {
+        ...sprint11Project,
+        selectedPageBeatId: "beat-refined",
+        planningChatHistory: [],
+        storyPlan: {
+          id: "plan-refined",
+          projectId: sprint11Project.id,
+          synopsis: "Refined scene",
+          targetPageCount: 1,
+          status: "approved",
+          createdAt: original.createdAt,
+          updatedAt: child.createdAt,
+          pageBeats: [
+            {
+              id: "beat-refined",
+              storyPlanId: "plan-refined",
+              order: 1,
+              title: "Refined page",
+              description: "Scene",
+              visualDirection: "Wide",
+              narration: "",
+              dialogue: "",
+              status: "approved",
+              creation: {
+                ...creation,
+                illustrationStatus: "illustration_approved",
+                imageVersions: [original, child],
+                approvedImageVersionId: child.id,
+                illustrationApprovedAt: "2026-09-25T12:00:00.000Z",
+              },
+            },
+          ],
+        },
+      },
+    ],
+    selectedProjectId: sprint11Project.id,
+    activeView: "page_creation",
+  };
+
+  const restored = parseStudioSnapshot(JSON.stringify(snapshot));
+  const restoredCreation = restored.projects[0].storyPlan.pageBeats[0].creation;
+  assert.equal(restored.version, 5);
+  assert.equal(restoredCreation.imageVersions.length, 2);
+  assert.equal(restoredCreation.imageVersions[1].parentVersionId, original.id);
+  assert.equal(restoredCreation.imageVersions[1].refinementInstruction, "Make it colder");
+  assert.equal(restoredCreation.approvedImageVersionId, child.id);
+  assert.equal(restoredCreation.illustrationApprovedAt, "2026-09-25T12:00:00.000Z");
 });

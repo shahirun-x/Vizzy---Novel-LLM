@@ -4,7 +4,9 @@ import { useState, type FormEvent } from "react";
 import { Icon } from "@/components/ui/icon";
 import Image from "next/image";
 import { VisualGenerationPanel } from "@/components/storyboard/visual-generation-panel";
+import { VisualRefinementPanel } from "@/components/storyboard/visual-refinement-panel";
 import { getOutputTypeLabel } from "@/lib/onboarding";
+import { getIllustrationProgress } from "@/lib/page-creation";
 import type {
   PageBeat,
   PageCreativeSettings,
@@ -27,6 +29,9 @@ interface PageCreationWorkspaceProps {
   onRemoveReference: (referenceId: string) => void;
   onGenerateVisuals: () => Promise<void>;
   onSelectImageVersion: (versionId: string) => void;
+  onRefineImageVersion: (instruction: string) => Promise<string>;
+  onApproveIllustration: () => void;
+  onReopenIllustration: () => void;
 }
 
 const fieldClass =
@@ -37,10 +42,12 @@ function PromptEditor({
   page,
   onSave,
   onReset,
+  locked,
 }: {
   page: PageBeat;
   onSave: (prompt: string) => void;
   onReset: () => void;
+  locked: boolean;
 }) {
   const activePrompt = page.creation.prompt.editedPrompt ?? page.creation.prompt.automaticPrompt;
   const [draft, setDraft] = useState(activePrompt);
@@ -72,7 +79,7 @@ function PromptEditor({
             setDirty(false);
             onReset();
           }}
-          disabled={!isEdited && !dirty}
+          disabled={locked || (!isEdited && !dirty)}
           className="rounded-lg border border-[#625b50]/12 bg-white/45 px-2.5 py-2 text-[8px] font-semibold text-[#69645d] disabled:cursor-not-allowed disabled:opacity-35"
         >
           Reset to automatic
@@ -81,6 +88,7 @@ function PromptEditor({
       <textarea
         aria-label="Illustration prompt"
         value={displayedPrompt}
+        disabled={locked}
         onChange={(event) => {
           setDraft(event.target.value);
           setDirty(true);
@@ -99,7 +107,7 @@ function PromptEditor({
             setDraft(displayedPrompt);
             setDirty(false);
           }}
-          disabled={!displayedPrompt.trim() || (!dirty && isEdited)}
+          disabled={locked || !displayedPrompt.trim() || (!dirty && isEdited)}
           className="rounded-lg bg-[#282927] px-3 py-2 text-[9px] font-semibold text-white hover:bg-[#3a3b38] disabled:cursor-not-allowed disabled:opacity-40"
         >
           Save prompt changes
@@ -113,10 +121,12 @@ function ReferenceLibrary({
   page,
   onAdd,
   onRemove,
+  locked,
 }: {
   page: PageBeat;
   onAdd: PageCreationWorkspaceProps["onAddReference"];
   onRemove: (referenceId: string) => void;
+  locked: boolean;
 }) {
   const [title, setTitle] = useState("");
   const [url, setUrl] = useState("");
@@ -160,6 +170,7 @@ function ReferenceLibrary({
                 <button
                   type="button"
                   onClick={() => onRemove(reference.id)}
+                  disabled={locked}
                   className="rounded-md px-2 py-1 text-[8px] text-[#9a6f67] hover:bg-[#9a6f67]/10"
                   aria-label={`Remove ${reference.title}`}
                 >
@@ -186,7 +197,7 @@ function ReferenceLibrary({
         </div>
       )}
 
-      <form onSubmit={submit} className="mt-4 grid gap-3 border-t border-[#625b50]/10 pt-4 sm:grid-cols-2">
+      <form onSubmit={submit} className={`mt-4 grid gap-3 border-t border-[#625b50]/10 pt-4 sm:grid-cols-2 ${locked ? "pointer-events-none opacity-45" : ""}`}>
         <label>
           <span className={labelClass}>Reference title</span>
           <input value={title} onChange={(event) => setTitle(event.target.value)} className={fieldClass} placeholder="Rain-soaked station" />
@@ -229,9 +240,14 @@ export function PageCreationWorkspace({
   onRemoveReference,
   onGenerateVisuals,
   onSelectImageVersion,
+  onRefineImageVersion,
+  onApproveIllustration,
+  onReopenIllustration,
 }: PageCreationWorkspaceProps) {
   const pages = [...(project.storyPlan?.pageBeats ?? [])].sort((a, b) => a.order - b.order);
   const pageIndex = pages.findIndex((candidate) => candidate.id === page.id);
+  const isApproved = Boolean(page.creation.approvedImageVersionId);
+  const progress = getIllustrationProgress(project.storyPlan);
   const aspectClass =
     (page.creation.imageVersions.find((version) => version.selected)?.aspectRatio ??
       page.creation.imageVersions.at(-1)?.aspectRatio ??
@@ -243,7 +259,9 @@ export function PageCreationWorkspace({
         ? "aspect-square"
         : "aspect-[3/4]";
   const previewVersion =
-    page.creation.imageVersions.find((version) => version.selected) ??
+    page.creation.imageVersions.find(
+      (version) => version.id === page.creation.approvedImageVersionId,
+    ) ?? page.creation.imageVersions.find((version) => version.selected) ??
     page.creation.imageVersions.at(-3);
   const statusLabel = {
     not_started: "Not started",
@@ -251,6 +269,8 @@ export function PageCreationWorkspace({
     generating: "Preparing options",
     options_ready: "Options generated",
     direction_selected: "Direction selected",
+    refining: "Refining",
+    illustration_approved: "Illustration approved",
     approved: "Approved",
   }[page.creation.illustrationStatus];
 
@@ -291,7 +311,11 @@ export function PageCreationWorkspace({
                 <div className="relative h-full w-full">
                   <Image src={previewVersion.imageUrl} alt={`${previewVersion.optionLabel} prototype visual`} fill sizes="360px" unoptimized className="object-cover" />
                   <span className="absolute left-3 top-3 rounded-full bg-black/55 px-2.5 py-1.5 text-[7px] font-bold uppercase tracking-[0.12em] text-white backdrop-blur-sm">
-                    {previewVersion.selected ? "Selected direction" : "Latest prototype"}
+                    {previewVersion.id === page.creation.approvedImageVersionId
+                      ? "Approved illustration"
+                      : previewVersion.selected
+                        ? "Selected direction"
+                        : "Latest prototype"}
                   </span>
                 </div>
               ) : (
@@ -315,8 +339,8 @@ export function PageCreationWorkspace({
 
         <section className="rounded-2xl border border-[#625b50]/10 bg-[#f7f2ea]/90 p-4 shadow-[0_10px_30px_rgba(75,67,58,.07)]">
           <h3 className="text-[11px] font-semibold text-[#34342f]">Creative settings</h3>
-          <p className="mt-1 text-[9px] leading-relaxed text-[#89837a]">Tune the page without changing its approved story beat.</p>
-          <div className="mt-4 grid gap-3">
+          <p className="mt-1 text-[9px] leading-relaxed text-[#89837a]">{isApproved ? "Reopen visual development to change page settings." : "Tune the page without changing its approved story beat."}</p>
+          <div inert={isApproved ? true : undefined} className={`mt-4 grid gap-3 ${isApproved ? "opacity-45" : ""}`}>
             <label><span className={labelClass}>Camera angle</span><select value={page.creation.settings.cameraAngle} onChange={(event) => onUpdateSettings({ cameraAngle: event.target.value })} className={fieldClass}>{["Eye level", "Low angle", "High angle", "Overhead", "Dutch angle", "Close perspective"].map((item) => <option key={item}>{item}</option>)}</select></label>
             <label><span className={labelClass}>Shot type</span><select value={page.creation.settings.shotType} onChange={(event) => onUpdateSettings({ shotType: event.target.value })} className={fieldClass}>{["Wide shot", "Medium shot", "Close-up", "Extreme close-up", "Full shot"].map((item) => <option key={item}>{item}</option>)}</select></label>
             <label><span className={labelClass}>Lighting</span><select value={page.creation.settings.lighting} onChange={(event) => onUpdateSettings({ lighting: event.target.value })} className={fieldClass}>{["Natural soft light", "Dramatic contrast", "Golden hour", "Moonlit", "Diffused studio", "Backlit silhouette"].map((item) => <option key={item}>{item}</option>)}</select></label>
@@ -343,9 +367,22 @@ export function PageCreationWorkspace({
         />
       </div>
 
+      <div className="mt-5">
+        <VisualRefinementPanel
+          page={page}
+          hasNextPage={pageIndex < pages.length - 1}
+          allIllustrationsApproved={progress.complete}
+          onSelect={onSelectImageVersion}
+          onRefine={onRefineImageVersion}
+          onApprove={onApproveIllustration}
+          onReopen={onReopenIllustration}
+          onContinue={() => onNavigate("next")}
+        />
+      </div>
+
       <div className="mt-5 grid gap-5 xl:grid-cols-2">
-        <PromptEditor key={`${page.id}-prompt`} page={page} onSave={onSavePrompt} onReset={onResetPrompt} />
-        <ReferenceLibrary key={`${page.id}-references`} page={page} onAdd={onAddReference} onRemove={onRemoveReference} />
+        <PromptEditor key={`${page.id}-prompt`} page={page} onSave={onSavePrompt} onReset={onResetPrompt} locked={isApproved} />
+        <ReferenceLibrary key={`${page.id}-references`} page={page} onAdd={onAddReference} onRemove={onRemoveReference} locked={isApproved} />
       </div>
     </div>
   );

@@ -4,7 +4,7 @@ Vizzy is a conversational creative studio for making graphic novels, storyboards
 
 ## Current status
 
-Vizzy is a working Sprint 1.3B prototype. It supports:
+Vizzy is a working Sprint 1.4 prototype. It supports:
 
 - Multiple local projects
 - Deterministic chat-based creative onboarding
@@ -22,6 +22,9 @@ Vizzy is a working Sprint 1.3B prototype. It supports:
 - Three visibly distinct prototype visual directions per generation batch
 - Explicit direction selection and page-isolated, newest-first version history
 - Immutable prompt, aspect-ratio, batch, composition, and seed metadata per visual
+- Deterministic child refinements with persistent parent/root lineage and branching
+- Side-by-side parent/refinement comparison
+- Deliberate page-level illustration approval, protected reopening, and completion progress
 - Versioned browser-local persistence
 
 The prototype intentionally has no external AI or image provider, authentication, database, billing, slideshow export, or production story-planning service. All displayed visuals are clearly labelled local SVG demo compositions.
@@ -94,6 +97,10 @@ The App Router page remains a Server Component. `StudioShell` is the explicit cl
 12. Save a deliberate prompt edit, add visual-reference metadata, or leave page notes through chat.
 13. Generate exactly three local prototype visual directions and select one direction.
 14. Generate additional batches while retaining and inspecting every earlier version.
+15. Refine the selected version with a natural-language prototype instruction.
+16. Compare each child with its parent and branch again from any older version.
+17. Approve one selected version as the page illustration or explicitly reopen it later.
+18. Continue through approved story pages while tracking illustration completion.
 
 Editing, adding, deleting, or reordering an approved plan returns it to draft and requires reapproval.
 
@@ -129,6 +136,8 @@ One `PageBeat` represents one future illustrated page and contains:
 - Automatic and user-edited prompt state
 - Visual-reference metadata and a dedicated page conversation
 - Page-isolated image-version history with stable batch and option metadata
+- Parent/root refinement lineage, source type, exact instruction, and refinement sequence
+- Page-level approved image-version reference and approval timestamp
 
 Nested comic-panel modeling remains intentionally out of scope.
 
@@ -136,7 +145,7 @@ Nested comic-panel modeling remains intentionally out of scope.
 
 The complete prototype state is stored in browser `localStorage` under `vizzy:studio-state`. `useProjectStore` is the only browser-storage boundary. It persists projects, selection, workspace view, onboarding, Style Bible, chat histories, story plans, page edits and ordering, approval state, selected page, page creative settings, prepared prompts, reference metadata, and page conversations.
 
-The storage envelope is now version 4. `src/lib/project-storage.ts` accepts version-1 through version-4 snapshots, adds missing planning, page-creation, or visual-version fields, and preserves existing story, style, character, selection, chat, plan, page, and generation-history data. Migrated state is written as version 4 on the next state change.
+The storage envelope is now version 5. `src/lib/project-storage.ts` accepts version-1 through version-5 snapshots, adds missing planning, page-creation, visual-version, lineage, or approval fields, and preserves existing story, style, character, selection, chat, plan, page, and generation-history data. Migrated state is written as version 5 on the next state change.
 
 `useSyncExternalStore` supplies a server-safe snapshot, so browser APIs are not read during server rendering.
 
@@ -155,7 +164,7 @@ Data remains local to the current browser profile and device. Clearing site data
 
 ## Planned architecture
 
-`src/services/image-generation.ts` defines the provider boundary for initial generation, multiple options, references, Style Bible context, and future parent-version refinement. `src/services/mock-image-generation.ts` implements only the initial three-option flow with deterministic local SVG visuals. A future provider can replace that service without changing the page history model or UI contract.
+`src/services/image-generation.ts` defines the provider boundary for initial generation, multiple options, references, Style Bible context, and parent-version refinement. `src/services/mock-image-generation.ts` implements generation and recognizable deterministic refinements with clearly labelled local SVG visuals. A future provider can replace that service without changing the page history, approval model, or UI contract.
 
 ## Environment
 

@@ -114,6 +114,8 @@ export type IllustrationStatus =
   | "generating"
   | "options_ready"
   | "direction_selected"
+  | "refining"
+  | "illustration_approved"
   | "approved";
 
 export interface PageCreationState {
@@ -123,6 +125,8 @@ export interface PageCreationState {
   references: VisualReferenceMetadata[];
   chatHistory: ChatMessage[];
   imageVersions: ImageVersion[];
+  approvedImageVersionId: string | null;
+  illustrationApprovedAt: string | null;
 }
 
 export type PageStatus = "draft" | "in_review" | "approved";
@@ -146,6 +150,7 @@ export interface ImageVersion {
   createdAt: string;
   selected: boolean;
   parentVersionId: string | null;
+  rootVersionId: string;
   generationBatchId: string;
   batchNumber: number;
   optionIndex: number;
@@ -153,6 +158,10 @@ export interface ImageVersion {
   aspectRatio: PageAspectRatio;
   compositionDirection: string;
   visualSeed: string;
+  generationSource: "generated" | "refinement";
+  refinementInstruction: string | null;
+  refinementDepth: number;
+  refinementSequence: number;
   status: "generated" | "selected" | "approved" | "superseded";
 }
 

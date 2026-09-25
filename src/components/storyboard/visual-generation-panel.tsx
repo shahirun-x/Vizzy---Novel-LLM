@@ -5,13 +5,13 @@ import { useState } from "react";
 import { getImageGenerationBatches } from "@/lib/page-creation";
 import type { ImageVersion, PageBeat } from "@/types/domain";
 
-function aspectClass(aspectRatio: ImageVersion["aspectRatio"]) {
+export function aspectClass(aspectRatio: ImageVersion["aspectRatio"]) {
   if (aspectRatio === "16:9") return "aspect-video";
   if (aspectRatio === "1:1") return "aspect-square";
   return "aspect-[3/4]";
 }
 
-function PrototypeImage({ version, sizes }: { version: ImageVersion; sizes: string }) {
+export function PrototypeImage({ version, sizes }: { version: ImageVersion; sizes: string }) {
   return (
     <div
       className={`relative overflow-hidden rounded-xl bg-[#17151f] ${aspectClass(version.aspectRatio)}`}
@@ -43,11 +43,12 @@ export function VisualGenerationPanel({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const batches = getImageGenerationBatches(page.creation.imageVersions);
   const currentBatch = batches[0];
+  const isApproved = Boolean(page.creation.approvedImageVersionId);
   const activePrompt =
     page.creation.prompt.editedPrompt ?? page.creation.prompt.automaticPrompt;
 
   async function generate() {
-    if (isGenerating || !activePrompt.trim()) return;
+    if (isGenerating || !activePrompt.trim() || isApproved) return;
     setIsGenerating(true);
     setErrorMessage(null);
     try {
@@ -81,12 +82,14 @@ export function VisualGenerationPanel({
         <button
           type="button"
           onClick={generate}
-          disabled={isGenerating || !activePrompt.trim()}
+          disabled={isGenerating || !activePrompt.trim() || isApproved}
           className="rounded-xl bg-[#777fd7] px-4 py-2.5 text-[9px] font-semibold text-white shadow-sm transition hover:bg-[#686fca] disabled:cursor-not-allowed disabled:opacity-45"
         >
           {isGenerating
             ? "Preparing three directions…"
-            : batches.length
+            : isApproved
+              ? "Illustration locked"
+              : batches.length
               ? "Generate another set"
               : "Generate visual options"}
         </button>
@@ -95,6 +98,12 @@ export function VisualGenerationPanel({
       {!activePrompt.trim() && (
         <div className="mt-4 rounded-xl border border-[#a77d58]/20 bg-[#f2e5d7] px-3 py-2.5 text-[9px] text-[#7d5c40]">
           Prepare or save an illustration prompt before generating visual options.
+        </div>
+      )}
+
+      {isApproved && (
+        <div className="mt-4 rounded-xl border border-[#607251]/20 bg-[#e5eddc] px-3 py-2.5 text-[9px] text-[#536346]">
+          This page is approved. Reopen visual development before generating or selecting alternatives.
         </div>
       )}
 
@@ -158,7 +167,7 @@ export function VisualGenerationPanel({
                   <button
                     type="button"
                     onClick={() => onSelect(version.id)}
-                    disabled={version.selected}
+                    disabled={version.selected || isApproved}
                     className={`mt-2.5 w-full rounded-lg px-2 py-2 text-[8px] font-semibold ${
                       version.selected
                         ? "cursor-default bg-[#777fd7]/12 text-[#656cb7]"
@@ -177,7 +186,7 @@ export function VisualGenerationPanel({
       {batches.length > 0 && (
         <div className="mt-5 border-t border-[#625b50]/10 pt-4">
           <div>
-            <h4 className="text-[10px] font-semibold text-[#44413a]">Version history</h4>
+            <h4 className="text-[10px] font-semibold text-[#44413a]">Generation history</h4>
             <p className="mt-1 text-[8px] text-[#8b857c]">Newest batches appear first. Earlier options remain selectable.</p>
           </div>
           <div className="mt-3 space-y-2">
@@ -195,6 +204,7 @@ export function VisualGenerationPanel({
                       key={version.id}
                       type="button"
                       onClick={() => onSelect(version.id)}
+                      disabled={isApproved}
                       className={`rounded-xl border p-1.5 text-left ${
                         version.selected
                           ? "border-[#777fd7] bg-[#777fd7]/8"

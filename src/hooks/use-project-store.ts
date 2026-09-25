@@ -5,13 +5,16 @@ import { answerOnboardingQuestion, createProject } from "@/lib/onboarding";
 import { buildIllustrationPrompt } from "@/lib/illustration-prompt";
 import {
   addVisualReference,
+  appendRefinedImageVersion,
   appendImageGenerationBatch,
+  approveSelectedImageVersion,
   canOpenPageCreation,
   createPageChatMessage,
   getAdjacentPageBeatId,
   getImageGenerationBatches,
   normalizePageCreationState,
   removeVisualReference,
+  reopenIllustrationDevelopment,
   resetEditedPrompt,
   saveEditedPrompt,
   selectImageVersion,
@@ -117,9 +120,11 @@ function updateProjectPageCreation(
       ...project.storyPlan,
       pageBeats: project.storyPlan.pageBeats.map((page) => {
         if (page.id !== pageBeatId) return page;
-        const creation = updater(normalizePageCreationState(page.creation));
+        const normalizedCreation = normalizePageCreationState(page.creation);
+        const creation = updater(normalizedCreation);
         const preparedPage = { ...page, creation };
-        const automaticPrompt = refreshPrompt
+        const shouldRefreshPrompt = refreshPrompt && !normalizedCreation.approvedImageVersionId;
+        const automaticPrompt = shouldRefreshPrompt
           ? buildIllustrationPrompt(project, preparedPage)
           : creation.prompt.automaticPrompt;
         return {
@@ -127,13 +132,13 @@ function updateProjectPageCreation(
           creation: {
             ...creation,
             illustrationStatus:
-              refreshPrompt && creation.illustrationStatus === "not_started"
+              shouldRefreshPrompt && creation.illustrationStatus === "not_started"
                 ? ("prompt_ready" as const)
                 : creation.illustrationStatus,
             prompt: {
               ...creation.prompt,
               automaticPrompt,
-              updatedAt: refreshPrompt
+              updatedAt: shouldRefreshPrompt
                 ? new Date().toISOString()
                 : creation.prompt.updatedAt,
             },
@@ -182,7 +187,7 @@ export function useProjectStore() {
     const project = createProject();
     updateState((current) => ({
       ...current,
-      version: 4,
+      version: 5,
       projects: [...current.projects, project],
       selectedProjectId: project.id,
       activeView: "story",
@@ -372,10 +377,14 @@ export function useProjectStore() {
         if (!project) return current;
         return replaceProject(
           current,
-          updateProjectPageCreation(project, pageBeatId, (creation) => ({
-            ...creation,
-            settings: { ...creation.settings, ...updates },
-          })),
+          updateProjectPageCreation(project, pageBeatId, (creation) =>
+            creation.approvedImageVersionId
+              ? creation
+              : {
+                  ...creation,
+                  settings: { ...creation.settings, ...updates },
+                },
+          ),
         );
       });
     },
@@ -392,7 +401,9 @@ export function useProjectStore() {
           ? replaceProject(
               current,
               updateProjectPageCreation(project, pageBeatId, (creation) =>
-                saveEditedPrompt(creation, prompt),
+                creation.approvedImageVersionId
+                  ? creation
+                  : saveEditedPrompt(creation, prompt),
               ),
             )
           : current;
@@ -410,7 +421,11 @@ export function useProjectStore() {
         return project
           ? replaceProject(
               current,
-              updateProjectPageCreation(project, pageBeatId, resetEditedPrompt),
+              updateProjectPageCreation(project, pageBeatId, (creation) =>
+                creation.approvedImageVersionId
+                  ? creation
+                  : resetEditedPrompt(creation),
+              ),
             )
           : current;
       });
@@ -431,7 +446,9 @@ export function useProjectStore() {
           ? replaceProject(
               current,
               updateProjectPageCreation(project, pageBeatId, (creation) =>
-                addVisualReference(creation, pageBeatId, reference),
+                creation.approvedImageVersionId
+                  ? creation
+                  : addVisualReference(creation, pageBeatId, reference),
               ),
             )
           : current;
@@ -450,7 +467,9 @@ export function useProjectStore() {
           ? replaceProject(
               current,
               updateProjectPageCreation(project, pageBeatId, (creation) =>
-                removeVisualReference(creation, referenceId),
+                creation.approvedImageVersionId
+                  ? creation
+                  : removeVisualReference(creation, referenceId),
               ),
             )
           : current;
@@ -470,23 +489,27 @@ export function useProjectStore() {
         if (!project) return current;
         return replaceProject(
           current,
-          updateProjectPageCreation(project, pageBeatId, (creation) => ({
-            ...creation,
-            settings: {
-              ...creation.settings,
-              additionalInstructions: [creation.settings.additionalInstructions, note]
-                .filter(Boolean)
-                .join("\n"),
-            },
-            chatHistory: [
-              ...creation.chatHistory,
-              createPageChatMessage("user", note),
-              createPageChatMessage(
-                "assistant",
-                "Saved verbatim as an additional instruction for this page. The prepared automatic prompt now includes it.",
-              ),
-            ],
-          })),
+          updateProjectPageCreation(project, pageBeatId, (creation) =>
+            creation.approvedImageVersionId
+              ? creation
+              : {
+                  ...creation,
+                  settings: {
+                    ...creation.settings,
+                    additionalInstructions: [creation.settings.additionalInstructions, note]
+                      .filter(Boolean)
+                      .join("\n"),
+                  },
+                  chatHistory: [
+                    ...creation.chatHistory,
+                    createPageChatMessage("user", note),
+                    createPageChatMessage(
+                      "assistant",
+                      "Saved verbatim as an additional instruction for this page. The prepared automatic prompt now includes it.",
+                    ),
+                  ],
+                },
+          ),
         );
       });
     },
@@ -508,6 +531,12 @@ export function useProjectStore() {
       }
 
       const creation = normalizePageCreationState(page.creation);
+      if (creation.approvedImageVersionId) {
+        throw new ImageGenerationError(
+          "INVALID_REQUEST",
+          "Reopen visual development before generating another set.",
+        );
+      }
       const prompt =
         creation.prompt.mode === "edited"
           ? creation.prompt.editedPrompt?.trim()
@@ -594,23 +623,29 @@ export function useProjectStore() {
             updateProjectPageCreation(
               activeProject,
               pageBeatId,
-              (activeCreation) => ({
-                ...activeCreation,
-                illustrationStatus: activeCreation.imageVersions.some(
+              (activeCreation) => {
+                const selectedVersion = activeCreation.imageVersions.find(
                   (version) => version.selected,
-                )
-                  ? "direction_selected"
-                  : activeCreation.imageVersions.length
-                    ? "options_ready"
-                    : "prompt_ready",
-                chatHistory: [
-                  ...activeCreation.chatHistory,
-                  createPageChatMessage(
-                    "assistant",
-                    "The prototype visual service couldn't prepare this set. Your prompt and earlier versions are unchanged.",
-                  ),
-                ],
-              }),
+                );
+                return {
+                  ...activeCreation,
+                  illustrationStatus:
+                    selectedVersion?.generationSource === "refinement"
+                      ? ("refining" as const)
+                      : selectedVersion
+                        ? ("direction_selected" as const)
+                        : activeCreation.imageVersions.length
+                          ? ("options_ready" as const)
+                          : ("prompt_ready" as const),
+                  chatHistory: [
+                    ...activeCreation.chatHistory,
+                    createPageChatMessage(
+                      "assistant",
+                      "The prototype visual service couldn't prepare this set. Your prompt and earlier versions are unchanged.",
+                    ),
+                  ],
+                };
+              },
               false,
             ),
           );
@@ -638,7 +673,7 @@ export function useProjectStore() {
         const version = page?.creation.imageVersions.find(
           (candidate) => candidate.id === versionId,
         );
-        if (!project || !version) return current;
+        if (!project || !version || page?.creation.approvedImageVersionId) return current;
 
         return replaceProject(
           current,
@@ -654,6 +689,178 @@ export function useProjectStore() {
                   createPageChatMessage(
                     "assistant",
                     `${version.optionLabel} is now your selected direction. We can refine this prototype visual next.`,
+                  ),
+                ],
+              };
+            },
+            false,
+          ),
+        );
+      });
+    },
+    [updateState],
+  );
+
+  const refinePageImageVersion = useCallback(
+    async (pageBeatId: string, refinementInstruction: string) => {
+      const current = parseStudioSnapshot(getClientSnapshot());
+      const project = current.projects.find(
+        (candidate) => candidate.id === current.selectedProjectId,
+      );
+      const page = project?.storyPlan?.pageBeats.find(
+        (candidate) => candidate.id === pageBeatId,
+      );
+      const creation = page ? normalizePageCreationState(page.creation) : null;
+      const parentVersion = creation?.imageVersions.find((version) => version.selected);
+
+      if (!project || !page || !creation || !parentVersion) {
+        throw new ImageGenerationError(
+          "INVALID_REQUEST",
+          "Select a visual version before creating a refinement.",
+        );
+      }
+      if (creation.approvedImageVersionId) {
+        throw new ImageGenerationError(
+          "INVALID_REQUEST",
+          "Reopen visual development before refining an approved illustration.",
+        );
+      }
+      if (!refinementInstruction.trim()) {
+        throw new ImageGenerationError(
+          "INVALID_REQUEST",
+          "Describe what you would like to change.",
+        );
+      }
+
+      const rootVersionId = parentVersion.rootVersionId || parentVersion.id;
+      const refinementSequence =
+        Math.max(
+          0,
+          ...creation.imageVersions
+            .filter((version) => version.rootVersionId === rootVersionId)
+            .map((version) => version.refinementSequence),
+        ) + 1;
+
+      try {
+        const result = await imageGenerationService.refine({
+          projectId: project.id,
+          pageId: page.id,
+          parentVersion,
+          refinementInstructions: refinementInstruction,
+          refinementSequence,
+          styleBible: project.styleBible,
+          references: creation.references,
+        });
+        const child = result.versions[0];
+        if (!child) {
+          throw new ImageGenerationError(
+            "GENERATION_FAILED",
+            "The prototype refinement service returned no child version.",
+          );
+        }
+
+        updateState((stateAfterRefinement) => {
+          const activeProject = stateAfterRefinement.projects.find(
+            (candidate) => candidate.id === project.id,
+          );
+          if (!activeProject) return stateAfterRefinement;
+          return replaceProject(
+            stateAfterRefinement,
+            updateProjectPageCreation(
+              activeProject,
+              pageBeatId,
+              (activeCreation) => {
+                if (activeCreation.approvedImageVersionId) return activeCreation;
+                const nextCreation = appendRefinedImageVersion(activeCreation, child);
+                return {
+                  ...nextCreation,
+                  chatHistory: [
+                    ...nextCreation.chatHistory,
+                    createPageChatMessage("user", refinementInstruction),
+                    createPageChatMessage(
+                      "assistant",
+                      "I created a new prototype version from your selected direction. The original remains available in version history.",
+                    ),
+                  ],
+                };
+              },
+              false,
+            ),
+          );
+        });
+        return child.id;
+      } catch (error) {
+        throw error instanceof ImageGenerationError
+          ? error
+          : new ImageGenerationError(
+              "GENERATION_FAILED",
+              "The prototype refinement service could not create this version.",
+            );
+      }
+    },
+    [updateState],
+  );
+
+  const approvePageIllustration = useCallback(
+    (pageBeatId: string) => {
+      updateState((current) => {
+        const project = current.projects.find(
+          (candidate) => candidate.id === current.selectedProjectId,
+        );
+        const page = project?.storyPlan?.pageBeats.find(
+          (candidate) => candidate.id === pageBeatId,
+        );
+        if (!project || !page) return current;
+        const creation = normalizePageCreationState(page.creation);
+        if (!creation.imageVersions.some((version) => version.selected)) return current;
+        const approvedCreation = approveSelectedImageVersion(creation);
+        return replaceProject(
+          current,
+          updateProjectPageCreation(
+            project,
+            pageBeatId,
+            () => ({
+              ...approvedCreation,
+              chatHistory: [
+                ...approvedCreation.chatHistory,
+                createPageChatMessage(
+                  "assistant",
+                  `Page ${page.order} is approved. You can move to the next page whenever you're ready.`,
+                ),
+              ],
+            }),
+            false,
+          ),
+        );
+      });
+    },
+    [updateState],
+  );
+
+  const reopenPageIllustration = useCallback(
+    (pageBeatId: string) => {
+      updateState((current) => {
+        const project = current.projects.find(
+          (candidate) => candidate.id === current.selectedProjectId,
+        );
+        const page = project?.storyPlan?.pageBeats.find(
+          (candidate) => candidate.id === pageBeatId,
+        );
+        if (!project || !page?.creation.approvedImageVersionId) return current;
+        return replaceProject(
+          current,
+          updateProjectPageCreation(
+            project,
+            pageBeatId,
+            (creation) => {
+              const reopened = reopenIllustrationDevelopment(creation);
+              return {
+                ...reopened,
+                chatHistory: [
+                  ...reopened.chatHistory,
+                  createPageChatMessage(
+                    "assistant",
+                    "This page is back in visual development. The previously approved version remains in history and approval will be required again.",
                   ),
                 ],
               };
@@ -808,6 +1015,9 @@ export function useProjectStore() {
     addPageInstruction,
     generatePageVisualOptions,
     selectPageImageVersion,
+    refinePageImageVersion,
+    approvePageIllustration,
+    reopenPageIllustration,
     updatePageBeat,
     addPageBeat,
     deletePageBeat,

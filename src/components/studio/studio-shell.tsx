@@ -29,6 +29,9 @@ export function StudioShell() {
     addPageInstruction,
     generatePageVisualOptions,
     selectPageImageVersion,
+    refinePageImageVersion,
+    approvePageIllustration,
+    reopenPageIllustration,
     updatePageBeat,
     addPageBeat,
     deletePageBeat,
@@ -126,6 +129,9 @@ export function StudioShell() {
         onRemovePageReference={removePageReference}
         onGeneratePageVisuals={generatePageVisualOptions}
         onSelectPageImageVersion={selectPageImageVersion}
+        onRefinePageImageVersion={refinePageImageVersion}
+        onApprovePageIllustration={approvePageIllustration}
+        onReopenPageIllustration={reopenPageIllustration}
         onUpdatePage={updatePageBeat}
         onAddPage={addPageBeat}
         onDeletePage={deletePageBeat}

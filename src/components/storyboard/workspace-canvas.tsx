@@ -36,6 +36,9 @@ interface WorkspaceCanvasProps {
   onRemovePageReference: (pageBeatId: string, referenceId: string) => void;
   onGeneratePageVisuals: (pageBeatId: string) => Promise<void>;
   onSelectPageImageVersion: (pageBeatId: string, versionId: string) => void;
+  onRefinePageImageVersion: (pageBeatId: string, instruction: string) => Promise<string>;
+  onApprovePageIllustration: (pageBeatId: string) => void;
+  onReopenPageIllustration: (pageBeatId: string) => void;
   onUpdatePage: (
     pageBeatId: string,
     updates: Partial<
@@ -222,6 +225,9 @@ export function WorkspaceCanvas({
   onRemovePageReference,
   onGeneratePageVisuals,
   onSelectPageImageVersion,
+  onRefinePageImageVersion,
+  onApprovePageIllustration,
+  onReopenPageIllustration,
   onUpdatePage,
   onAddPage,
   onDeletePage,
@@ -333,6 +339,11 @@ export function WorkspaceCanvas({
             onSelectImageVersion={(versionId) =>
               onSelectPageImageVersion(selectedPage.id, versionId)
             }
+            onRefineImageVersion={(instruction) =>
+              onRefinePageImageVersion(selectedPage.id, instruction)
+            }
+            onApproveIllustration={() => onApprovePageIllustration(selectedPage.id)}
+            onReopenIllustration={() => onReopenPageIllustration(selectedPage.id)}
           />
         ) : activeView === "story" && project.onboarding.status === "complete" ? (
           <ProjectSummary project={project} onSelectView={onSelectView} />

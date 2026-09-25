@@ -90,6 +90,81 @@ function createPrototypeSvg(
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 
+function interpretRefinement(instruction: string, seed: string) {
+  const words = instruction.toLowerCase();
+  const baseHueShift = Number.parseInt(hashText(seed).slice(0, 3), 36) % 36;
+  return {
+    hueShift:
+      baseHueShift +
+      (/(colder|cooler|blue)/.test(words) ? -48 : 0) +
+      (/(warmer|golden|amber)/.test(words) ? 42 : 0),
+    scale: /(closer|close-up|close up|more intimate)/.test(words)
+      ? 1.2
+      : /(wider|distant|more distant|environment)/.test(words)
+        ? 0.84
+        : 1,
+    verticalShift: /(lower angle|low angle)/.test(words)
+      ? 0.1
+      : /(higher angle|high angle|overhead)/.test(words)
+        ? -0.1
+        : 0,
+    lightOverlay: /(brighter|softer)/.test(words)
+      ? { color: "#fff4dc", opacity: 0.14 }
+      : /(darker|harsher|more tense)/.test(words)
+        ? { color: "#07060c", opacity: 0.3 }
+        : { color: "#777fd7", opacity: 0.08 },
+    fog: /(fog|mist|atmospheric|isolated)/.test(words),
+    storm: /(storm|rougher|chaotic|dramatic)/.test(words),
+    emphasizeCharacter: /(character|soldier|person|people|prominent)/.test(words),
+    negativeSpace: /(negative space|off-center|off center)/.test(words),
+  };
+}
+
+function createRefinementSvg(request: RefinePageImageRequest, seed: string) {
+  const parent = request.parentVersion;
+  const { width, height } = dimensions(parent.aspectRatio);
+  const treatment = interpretRefinement(request.refinementInstructions, seed);
+  const hue =
+    (Number.parseInt(hashText(parent.visualSeed).slice(0, 5), 36) + treatment.hueShift + 360) %
+    360;
+  const scaledWidth = width * treatment.scale;
+  const scaledHeight = height * treatment.scale;
+  const offsetX = treatment.negativeSpace
+    ? width * 0.16
+    : (width - scaledWidth) / 2;
+  const offsetY =
+    (height - scaledHeight) / 2 + treatment.verticalShift * height;
+  const titleSize = Math.max(26, Math.round(width * 0.035));
+  const metaSize = Math.max(18, Math.round(width * 0.021));
+  const rootLabel = parent.optionLabel.split(".")[0];
+  const versionLabel = `${rootLabel}.${request.refinementSequence}`;
+  const atmosphericMarkup = `${
+    treatment.fog
+      ? `<path d="M0 ${height * 0.48} Q${width * 0.25} ${height * 0.38} ${width * 0.52} ${height * 0.52} T${width} ${height * 0.46}" fill="none" stroke="#e8e9f2" stroke-opacity=".22" stroke-width="${width * 0.1}"/>`
+      : ""
+  }${
+    treatment.storm
+      ? `<g stroke="#d9dcff" stroke-opacity=".34" stroke-width="${Math.max(2, width * 0.004)}"><path d="M${width * 0.15} 0 L${width * 0.03} ${height * 0.32}"/><path d="M${width * 0.48} 0 L${width * 0.32} ${height * 0.4}"/><path d="M${width * 0.82} 0 L${width * 0.65} ${height * 0.38}"/></g>`
+      : ""
+  }${
+    treatment.emphasizeCharacter
+      ? `<circle cx="${width * 0.68}" cy="${height * 0.5}" r="${width * 0.075}" fill="hsl(${(hue + 55) % 360} 78% 68%)"/><path d="M${width * 0.57} ${height * 0.8} Q${width * 0.59} ${height * 0.58} ${width * 0.68} ${height * 0.58} Q${width * 0.78} ${height * 0.58} ${width * 0.8} ${height * 0.8}Z" fill="#11101a"/>`
+      : ""
+  }`;
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="Prototype refinement ${versionLabel}">
+    <defs><linearGradient id="refined-bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="hsl(${(hue + 210) % 360} 42% 14%)"/><stop offset="1" stop-color="hsl(${(hue + 275) % 360} 45% 7%)"/></linearGradient></defs>
+    <rect width="${width}" height="${height}" fill="url(#refined-bg)"/>
+    <g transform="translate(${offsetX} ${offsetY}) scale(${treatment.scale})">${visualMarkup(parent.optionIndex, width, height, hue)}</g>
+    ${atmosphericMarkup}
+    <rect width="${width}" height="${height}" fill="${treatment.lightOverlay.color}" opacity="${treatment.lightOverlay.opacity}"/>
+    <rect x="0" y="${height * 0.84}" width="${width}" height="${height * 0.16}" fill="#08070d" opacity=".9"/>
+    <text x="${width * 0.055}" y="${height * 0.9}" fill="#fff" font-family="Arial, sans-serif" font-size="${titleSize}" font-weight="700">PROTOTYPE VISUAL · ${versionLabel.toUpperCase()}</text>
+    <text x="${width * 0.055}" y="${height * 0.945}" fill="#c9c4d8" font-family="Arial, sans-serif" font-size="${metaSize}">Demo refinement · Level ${parent.refinementDepth + 1} · ${parent.aspectRatio}</text>
+  </svg>`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
 export class MockImageGenerationService implements ImageGenerationService {
   async generate(request: GeneratePageImagesRequest): Promise<ImageGenerationResult> {
     if (
@@ -122,6 +197,7 @@ export class MockImageGenerationService implements ImageGenerationService {
         createdAt,
         selected: false,
         parentVersionId: null,
+        rootVersionId: `image-${hashText(visualSeed)}`,
         generationBatchId,
         batchNumber: request.batchNumber,
         optionIndex,
@@ -129,6 +205,10 @@ export class MockImageGenerationService implements ImageGenerationService {
         aspectRatio: request.aspectRatio,
         compositionDirection: `${direction.name}. ${direction.description}`,
         visualSeed: hashText(visualSeed),
+        generationSource: "generated",
+        refinementInstruction: null,
+        refinementDepth: 0,
+        refinementSequence: 0,
         status: "generated",
       };
     });
@@ -137,10 +217,51 @@ export class MockImageGenerationService implements ImageGenerationService {
   }
 
   async refine(request: RefinePageImageRequest): Promise<ImageGenerationResult> {
-    void request;
-    throw new ImageGenerationError(
-      "NOT_IMPLEMENTED",
-      "Image refinement is intentionally outside this prototype sprint.",
-    );
+    const parent = request.parentVersion;
+    if (
+      !request.projectId ||
+      !request.pageId ||
+      !parent ||
+      parent.pageId !== request.pageId ||
+      !request.refinementInstructions.trim() ||
+      !Number.isInteger(request.refinementSequence) ||
+      request.refinementSequence < 1
+    ) {
+      throw new ImageGenerationError(
+        "INVALID_REQUEST",
+        "A selected parent and non-empty refinement instruction are required.",
+      );
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 140));
+
+    const seedSource = `${request.projectId}:${request.pageId}:${parent.id}:${request.refinementSequence}:${request.refinementInstructions}`;
+    const visualSeed = hashText(seedSource);
+    const id = `image-refined-${visualSeed}`;
+    const rootLabel = parent.optionLabel.split(".")[0];
+    const child: ImageVersion = {
+      id,
+      pageId: request.pageId,
+      imageUrl: createRefinementSvg(request, seedSource),
+      prompt: parent.prompt,
+      createdAt: new Date().toISOString(),
+      selected: true,
+      parentVersionId: parent.id,
+      rootVersionId: parent.rootVersionId || parent.id,
+      generationBatchId: parent.generationBatchId,
+      batchNumber: parent.batchNumber,
+      optionIndex: parent.optionIndex,
+      optionLabel: `${rootLabel}.${request.refinementSequence}`,
+      aspectRatio: parent.aspectRatio,
+      compositionDirection: `Refinement of ${parent.optionLabel}: ${request.refinementInstructions}`,
+      visualSeed,
+      generationSource: "refinement",
+      refinementInstruction: request.refinementInstructions,
+      refinementDepth: parent.refinementDepth + 1,
+      refinementSequence: request.refinementSequence,
+      status: "selected",
+    };
+
+    return { generationBatchId: parent.generationBatchId, versions: [child] };
   }
 }
