@@ -104,7 +104,7 @@ export function assembleVisualStory(project: Project): StoryAssemblyResult {
     }];
   });
   const incompletePages = pages.filter((page) => !page.complete).length;
-  if (incompletePages) issues.push(`${incompletePages} page${incompletePages === 1 ? "" : "s"} still require approved illustrations.`);
+  if (incompletePages) issues.push(`${incompletePages} page${incompletePages === 1 ? " still requires" : "s still require"} approved illustrations.`);
 
   return {
     ready: ordered.length > 0 && !invalidOrdering && incompletePages === 0,

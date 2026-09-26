@@ -4,7 +4,7 @@ Vizzy is a conversational creative studio for making graphic novels, storyboards
 
 ## Current status
 
-Vizzy is a working Sprint 1.5A prototype. It supports:
+Vizzy is a complete working prototype through the Sprint 1.5C export-compatibility correction. It supports:
 
 - Multiple local projects
 - Deterministic chat-based creative onboarding
@@ -28,9 +28,12 @@ Vizzy is a working Sprint 1.5A prototype. It supports:
 - Pure visual-book assembly from exact page-level approved image versions
 - A presentation-ready Pages overview with explicit complete and incomplete states
 - A responsive visual-book reader with captions, keyboard navigation, timed playback, looping, and fullscreen support
+- Approved-page downloads that preserve the original prototype image format
+- Portable visual-book ZIP exports with a versioned manifest and self-contained offline player
+- Feature-detected, client-side WebM slideshow recording with progress and cancellation
 - Versioned browser-local persistence
 
-The prototype intentionally has no external AI or image provider, authentication, database, billing, visual-book export, or production story-planning service. All displayed visuals are clearly labelled local SVG demo compositions.
+The prototype intentionally has no external AI or image provider, authentication, database, billing, MP4/audio generation, or production story-planning service. All displayed visuals are clearly labelled local SVG demo compositions.
 
 ## Stack
 
@@ -107,9 +110,13 @@ The App Router page remains a Server Component. `StudioShell` is the explicit cl
 19. Review the title, synopsis, format, ordered page cards, and assembly readiness in Pages.
 20. Preview approved artwork in the visual-book reader, then navigate manually or use timed playback.
 21. Toggle captions and looping, adjust the 2–30 second page duration, or enter fullscreen presentation mode.
+22. Download the current approved page in its original image format.
+23. Download the complete approved book as a portable ZIP containing `index.html`, `manifest.json`, and a `pages/` asset folder.
+24. Where the browser advertises compatible APIs and a WebM codec, record and download a silent WebM slideshow in real time.
 
 Editing, adding, deleting, or reordering an approved plan returns it to draft and requires reapproval.
 Reopening an illustration removes that page from the assembled reader until a version is explicitly approved again. A partial preview is clearly labelled and never substitutes a merely selected version.
+Complete-book and video exports require every page to have valid approved artwork. Partial previews remain available, but incomplete books are never presented as completed exports.
 
 ## Story-planning architecture
 
@@ -167,7 +174,9 @@ Data remains local to the current browser profile and device. Clearing site data
 - Generated visuals are deterministic local SVG prototypes, not production artwork or provider output.
 - Reference entries store metadata and external links only, not binaries or base64 payloads.
 - Page chat preserves instructions verbatim and does not attempt semantic interpretation.
-- The reader presents approved local prototype images only; it does not export a PDF, video, or packaged book.
+- Export supports embedded SVG, PNG, JPEG, and WebP approved artwork. The current prototype generator produces local SVG data URLs.
+- WebM availability depends on `MediaRecorder`, canvas `captureStream`, and an advertised WebM codec. Recording occurs in real time and requires the tab to remain open.
+- The prototype does not export MP4, generate voiceover, add audio, or perform server-side encoding.
 - There is no cloud sync, collaboration, authentication, or database.
 
 ## Planned architecture
@@ -175,6 +184,27 @@ Data remains local to the current browser profile and device. Clearing site data
 `src/services/image-generation.ts` defines the provider boundary for initial generation, multiple options, references, Style Bible context, and parent-version refinement. `src/services/mock-image-generation.ts` implements generation and recognizable deterministic refinements with clearly labelled local SVG visuals. A future provider can replace that service without changing the page history, approval model, or UI contract.
 
 `src/lib/story-assembly.ts` is the framework-independent visual-book assembly boundary. It sorts approved page beats, resolves only each page's `approvedImageVersionId`, reports gaps or invalid ordering, and returns immutable reader-page data. `VisualBookReader` owns transient playback controls and browser fullscreen behavior without changing generation, refinement, selection, or approval state.
+
+## Export architecture
+
+`src/lib/story-export.ts` prepares export readiness, descriptive filenames, exact approved-asset mappings, the schema-version-1 manifest, and an injection-safe standalone player. Its narrow, fail-closed SVG validator supports verified same-document gradient and filter references used by the local prototype generator while rejecting active content and external resources. `src/lib/zip.ts` creates the portable archive with the standard uncompressed ZIP format and rejects unsafe archive paths. These modules contain no browser-download or recording behavior and are directly tested.
+
+`src/services/story-export.ts` is the client-only operational layer. It triggers downloads, detects WebM support, draws approved artwork to a 1280×720 canvas without stretching, records the canvas stream, reports preparation/recording/finalization progress, handles cancellation, and releases media tracks and object URLs. Export files are generated on demand and are never placed in `localStorage`.
+
+The portable package contains:
+
+```text
+index.html
+manifest.json
+pages/
+  page-01.svg
+  page-02.svg
+  ...
+```
+
+To test a package, extract the ZIP completely and open `index.html` in a browser. The player needs no Vizzy server, internet connection, CDN, OpenAI service, or database. It provides previous/next, play/pause, restart, timing, looping, captions, and page progress. Opening `index.html` directly from inside a ZIP viewer is not supported because the browser cannot resolve the sibling `pages/` assets there.
+
+This milestone completes the local working prototype. It is not the production AI-powered MVP: provider integrations, authentication, cloud persistence, collaboration, billing, scalable media processing, import, and production security hardening remain future work.
 
 ## Environment
 

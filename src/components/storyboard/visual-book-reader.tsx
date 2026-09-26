@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { VisualBookExportPanel } from "@/components/storyboard/visual-book-export-panel";
 import {
   assembleVisualStory,
   DEFAULT_PAGE_DURATION_SECONDS,
@@ -178,6 +179,11 @@ export function VisualBookReader({ project, onClose, onOpenPage }: VisualBookRea
               </div>
             </div>
             {(!fullscreenAvailable || fullscreenNotice) && <p className="mt-2 text-right text-[8px] text-white/40">{fullscreenNotice || "Fullscreen is unavailable here; distraction-free preview remains active."}</p>}
+            <VisualBookExportPanel
+              project={project}
+              currentPageId={currentPage.pageId}
+              onOpenPage={onOpenPage}
+            />
           </div>
         </div>
       ) : (
