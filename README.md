@@ -4,7 +4,7 @@ Vizzy is a conversational creative studio for making graphic novels, storyboards
 
 ## Current status
 
-Vizzy is a complete working prototype through the Sprint 1.5C export-compatibility correction. It supports:
+Vizzy is a complete working prototype through Phase 2.0B asynchronous generation-job readiness. It supports:
 
 - Multiple local projects
 - Deterministic chat-based creative onboarding
@@ -19,6 +19,8 @@ Vizzy is a complete working prototype through the Sprint 1.5C export-compatibili
 - Deterministic automatic illustration prompts with explicit edit, save, and reset states
 - Page-scoped visual-reference metadata and conversational visual notes
 - A provider-independent image-generation service contract with a deterministic local mock
+- Persisted asynchronous generation and refinement jobs with explicit lifecycle states
+- Duplicate-request prevention, cancellation, explicit retry, and stale-response protection
 - Three visibly distinct prototype visual directions per generation batch
 - Explicit direction selection and page-isolated, newest-first version history
 - Immutable prompt, aspect-ratio, batch, composition, and seed metadata per visual
@@ -67,6 +69,18 @@ npm run typecheck # Run TypeScript without emitting files
 npm run build     # Create a production build
 npm run start     # Run the production build
 ```
+
+## Deploying to Vercel
+
+Vizzy uses the standard Next.js App Router layout and is ready for Vercel's zero-configuration Next.js deployment. No environment variables or external services are required for the current deterministic prototype.
+
+1. Import `shahirun-x/Vizzy---Novel-LLM` in the Vercel dashboard.
+2. Keep the detected framework preset as **Next.js** and the root directory as the repository root.
+3. Keep the default npm install and `npm run build` settings.
+4. Use `main` as the production branch. Feature-branch pushes can remain preview deployments until reviewed and merged.
+5. Deploy. Browser-local projects and generation-job history are isolated to each visitor's browser profile.
+
+A `vercel.json` file is intentionally unnecessary: framework detection, build output, and routing all use supported Next.js defaults. Local `.vercel` project metadata is ignored and must not be committed.
 
 ## Source structure
 
@@ -157,7 +171,7 @@ Nested comic-panel modeling remains intentionally out of scope.
 
 ## State and service architecture
 
-`useProjectStore` remains the stable React-facing facade used by the studio components. It subscribes to serialized state, exposes the existing UI command names, and coordinates asynchronous generation. Framework-independent state transitions live in `src/lib/project-commands.ts`; they contain project, planning, page-creation, selection, refinement, approval, and reopening rules without depending on React, browser storage, UI components, or an AI SDK.
+`useProjectStore` remains the stable React-facing facade used by the studio components. It subscribes to serialized state and exposes the existing UI command names. `GenerationJobCoordinator` owns asynchronous generation orchestration and live `AbortController` instances, while framework-independent transitions and applicability checks live in `src/lib/generation-jobs.ts` and `src/lib/project-commands.ts`. These modules contain project, planning, page-creation, job, selection, refinement, approval, and reopening rules without depending on React, browser storage, UI components, or an AI SDK.
 
 `src/services/studio-persistence.ts` defines the narrow persistence contract and supplies the default browser-local adapter. Domain commands operate only on state values and do not know where those values are stored. This keeps a future cloud persistence migration separate from creative workflow logic without introducing a repository framework.
 
@@ -169,7 +183,9 @@ See [docs/architecture.md](docs/architecture.md) for the dependency flow and rep
 
 The complete prototype state is stored in browser `localStorage` under `vizzy:studio-state` by the default `StudioPersistence` adapter. It persists projects, selection, workspace view, onboarding, Style Bible, chat histories, story plans, page edits and ordering, approval state, selected page, page creative settings, prepared prompts, reference metadata, and page conversations. Reader playback, timing, captions, looping, and the current reader page remain temporary UI state and do not alter project records.
 
-The storage envelope is now version 5. `src/lib/project-storage.ts` accepts version-1 through version-5 snapshots, adds missing planning, page-creation, visual-version, lineage, or approval fields, and preserves existing story, style, character, selection, chat, plan, page, and generation-history data. Migrated state is written as version 5 on the next state change.
+The storage envelope is now version 6. `src/lib/project-storage.ts` accepts version-1 through version-6 snapshots, adds missing planning, page-creation, visual-version, lineage, approval, or generation-job fields, and preserves existing story, style, character, selection, chat, plan, page, and generation-history data. Generation jobs persist their request snapshot, attempt lineage, timestamps, terminal error details, and result identifiers. Migrated state is written as version 6 on the next state change.
+
+Queued and running jobs recovered after a reload are marked `interrupted`; the app never claims that browser-local work continued in the background. The user can explicitly retry an interrupted, failed, or cancelled job when its captured page context is still applicable. A retry receives a new job ID and links back to the earlier attempt while reusing the original idempotency key and exact provider-independent request.
 
 `useSyncExternalStore` supplies a server-safe snapshot, so browser APIs are not read during server rendering.
 
@@ -182,6 +198,8 @@ Data remains local to the current browser profile and device. Clearing site data
 - Plans are limited to 30 pages for prototype usability.
 - Page cards represent full illustrated pages, not nested comic panels.
 - Generated visuals are deterministic local SVG prototypes, not production artwork or provider output.
+- Generation cancellation is cooperative. The local mock honors `AbortSignal`; a future provider adapter must do the same when possible. Applicability checks still reject any late response after cancellation or a relevant page-state change.
+- Jobs and retry history are local to this browser. There is no server queue, background worker, cross-device recovery, provider-side idempotency enforcement, or automatic retry policy.
 - Reference entries store metadata and external links only, not binaries or base64 payloads.
 - Page chat preserves instructions verbatim and does not attempt semantic interpretation.
 - Export supports embedded SVG, PNG, JPEG, and WebP approved artwork. The current prototype generator produces local SVG data URLs.
@@ -191,7 +209,7 @@ Data remains local to the current browser profile and device. Clearing site data
 
 ## Planned architecture
 
-`src/services/image-generation.ts` defines the provider boundary for initial generation, multiple options, references, Style Bible context, and parent-version refinement. `src/services/mock-image-generation.ts` implements generation and recognizable deterministic refinements with clearly labelled local SVG visuals. The provider is injected through application services; a future real implementation can replace the mock without changing the page history, approval model, UI contract, or serialized version-5 state.
+`src/services/image-generation.ts` defines the provider boundary for initial generation, multiple options, references, Style Bible context, parent-version refinement, and optional cancellation signals. `src/services/mock-image-generation.ts` implements generation and recognizable deterministic refinements with clearly labelled local SVG visuals. The provider is injected through application services; a future real implementation can replace the mock without changing the page history, approval model, UI contract, or serialized version-6 state.
 
 `src/lib/story-assembly.ts` is the framework-independent visual-book assembly boundary. It sorts approved page beats, resolves only each page's `approvedImageVersionId`, reports gaps or invalid ordering, and returns immutable reader-page data. `VisualBookReader` owns transient playback controls and browser fullscreen behavior without changing generation, refinement, selection, or approval state.
 

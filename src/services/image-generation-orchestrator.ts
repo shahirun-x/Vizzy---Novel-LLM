@@ -7,6 +7,7 @@ import {
   type GeneratePageImagesRequest,
   type ImageGenerationResult,
   type ImageGenerationService,
+  type ImageGenerationCallOptions,
   type RefinePageImageRequest,
 } from "@/services/image-generation";
 import type { Project } from "@/types/domain";
@@ -122,12 +123,18 @@ export function preparePageRefinement(
 export class ImageGenerationOrchestrator {
   constructor(private readonly service: ImageGenerationService) {}
 
-  generate(operation: PageGenerationOperation): Promise<ImageGenerationResult> {
-    return this.service.generate(operation.request);
+  generate(
+    operation: PageGenerationOperation,
+    options?: ImageGenerationCallOptions,
+  ): Promise<ImageGenerationResult> {
+    return this.service.generate(operation.request, options);
   }
 
-  async refine(operation: PageRefinementOperation): Promise<ImageGenerationResult> {
-    const result = await this.service.refine(operation.request);
+  async refine(
+    operation: PageRefinementOperation,
+    options?: ImageGenerationCallOptions,
+  ): Promise<ImageGenerationResult> {
+    const result = await this.service.refine(operation.request, options);
     if (!result.versions[0]) {
       throw new ImageGenerationError(
         "GENERATION_FAILED",

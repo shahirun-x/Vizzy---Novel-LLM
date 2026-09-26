@@ -145,10 +145,11 @@ function project(id = "project-1") {
 
 function stateWith(...projects) {
   return {
-    version: 5,
+    version: 6,
     projects,
     selectedProjectId: projects[0]?.id ?? null,
     activeView: "page_creation",
+    generationJobs: [],
   };
 }
 
@@ -296,7 +297,7 @@ test("selection, approval protection, and reopening retain exact version history
   assert.equal(creation.imageVersions.length, 2);
 });
 
-test("browser persistence restores version-5 state and notifies same-tab subscribers", () => {
+test("browser persistence restores version-6 state and notifies same-tab subscribers", () => {
   const originalWindow = globalThis.window;
   const values = new Map();
   const listeners = new Map();

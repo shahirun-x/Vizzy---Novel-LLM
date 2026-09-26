@@ -13,6 +13,7 @@ import type {
   VisualReferenceMetadata,
   VisualStyleBible,
 } from "@/types/domain";
+import type { GenerationJob } from "@/types/generation-job";
 
 interface WorkspaceCanvasProps {
   project: Project | null;
@@ -38,6 +39,9 @@ interface WorkspaceCanvasProps {
   onGeneratePageVisuals: (pageBeatId: string) => Promise<void>;
   onSelectPageImageVersion: (pageBeatId: string, versionId: string) => void;
   onRefinePageImageVersion: (pageBeatId: string, instruction: string) => Promise<string>;
+  generationJobs: GenerationJob[];
+  onCancelGenerationJob: (jobId: string) => void;
+  onRetryGenerationJob: (jobId: string) => Promise<string | null>;
   onApprovePageIllustration: (pageBeatId: string) => void;
   onReopenPageIllustration: (pageBeatId: string) => void;
   onUpdatePage: (
@@ -227,6 +231,9 @@ export function WorkspaceCanvas({
   onGeneratePageVisuals,
   onSelectPageImageVersion,
   onRefinePageImageVersion,
+  generationJobs,
+  onCancelGenerationJob,
+  onRetryGenerationJob,
   onApprovePageIllustration,
   onReopenPageIllustration,
   onUpdatePage,
@@ -354,6 +361,9 @@ export function WorkspaceCanvas({
             }
             onApproveIllustration={() => onApprovePageIllustration(selectedPage.id)}
             onReopenIllustration={() => onReopenPageIllustration(selectedPage.id)}
+            generationJobs={generationJobs}
+            onCancelGenerationJob={onCancelGenerationJob}
+            onRetryGenerationJob={onRetryGenerationJob}
           />
         ) : activeView === "story" && project.onboarding.status === "complete" ? (
           <ProjectSummary project={project} onSelectView={onSelectView} />

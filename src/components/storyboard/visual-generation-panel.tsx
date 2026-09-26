@@ -3,7 +3,9 @@
 import Image from "next/image";
 import { useState } from "react";
 import { getImageGenerationBatches } from "@/lib/page-creation";
+import { VisualJobStatus } from "@/components/storyboard/visual-job-status";
 import type { ImageVersion, PageBeat } from "@/types/domain";
+import type { GenerationJob } from "@/types/generation-job";
 
 export function aspectClass(aspectRatio: ImageVersion["aspectRatio"]) {
   if (aspectRatio === "16:9") return "aspect-video";
@@ -32,15 +34,21 @@ interface VisualGenerationPanelProps {
   page: PageBeat;
   onGenerate: () => Promise<void>;
   onSelect: (versionId: string) => void;
+  job: GenerationJob | null;
+  onCancelJob: (jobId: string) => void;
+  onRetryJob: (jobId: string) => Promise<string | null>;
 }
 
 export function VisualGenerationPanel({
   page,
   onGenerate,
   onSelect,
+  job,
+  onCancelJob,
+  onRetryJob,
 }: VisualGenerationPanelProps) {
-  const [isGenerating, setIsGenerating] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const isGenerating = job?.status === "queued" || job?.status === "running";
   const batches = getImageGenerationBatches(page.creation.imageVersions);
   const currentBatch = batches[0];
   const isApproved = Boolean(page.creation.approvedImageVersionId);
@@ -49,18 +57,17 @@ export function VisualGenerationPanel({
 
   async function generate() {
     if (isGenerating || !activePrompt.trim() || isApproved) return;
-    setIsGenerating(true);
     setErrorMessage(null);
     try {
       await onGenerate();
     } catch (error) {
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "The prototype visual service could not prepare this set.",
-      );
-    } finally {
-      setIsGenerating(false);
+      if (!(error && typeof error === "object" && "category" in error)) {
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "The prototype visual service could not prepare this set.",
+        );
+      }
     }
   }
 
@@ -94,6 +101,8 @@ export function VisualGenerationPanel({
               : "Generate visual options"}
         </button>
       </div>
+
+      <VisualJobStatus job={job} onCancel={onCancelJob} onRetry={onRetryJob} />
 
       {!activePrompt.trim() && (
         <div className="mt-4 rounded-xl border border-[#a77d58]/20 bg-[#f2e5d7] px-3 py-2.5 text-[9px] text-[#7d5c40]">

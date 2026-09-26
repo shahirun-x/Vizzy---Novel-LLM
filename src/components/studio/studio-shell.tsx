@@ -12,6 +12,7 @@ export function StudioShell() {
     projects,
     selectedProject,
     activeView,
+    generationJobs,
     addProject,
     selectProject,
     setActiveView,
@@ -30,6 +31,8 @@ export function StudioShell() {
     generatePageVisualOptions,
     selectPageImageVersion,
     refinePageImageVersion,
+    cancelGenerationJob,
+    retryGenerationJob,
     approvePageIllustration,
     reopenPageIllustration,
     updatePageBeat,
@@ -130,6 +133,9 @@ export function StudioShell() {
         onGeneratePageVisuals={generatePageVisualOptions}
         onSelectPageImageVersion={selectPageImageVersion}
         onRefinePageImageVersion={refinePageImageVersion}
+        generationJobs={generationJobs}
+        onCancelGenerationJob={cancelGenerationJob}
+        onRetryGenerationJob={retryGenerationJob}
         onApprovePageIllustration={approvePageIllustration}
         onReopenPageIllustration={reopenPageIllustration}
         onUpdatePage={updatePageBeat}

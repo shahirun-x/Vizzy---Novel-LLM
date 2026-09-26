@@ -8,6 +8,7 @@ import {
   canOpenPageCreation,
   createPageChatMessage,
   getAdjacentPageBeatId,
+  getRestingIllustrationStatus,
   normalizePageCreationState,
   removeVisualReference,
   reopenIllustrationDevelopment,
@@ -130,7 +131,7 @@ function refreshProjectPrompts(project: Project) {
 export function addProjectToStudio(state: PersistedStudioState, project: Project) {
   return {
     ...state,
-    version: 5 as const,
+    version: 6 as const,
     projects: [...state.projects, project],
     selectedProjectId: project.id,
     activeView: "story" as const,
@@ -431,17 +432,9 @@ export function restorePageAfterGenerationFailure(
           project,
           pageBeatId,
           (creation) => {
-            const selectedVersion = creation.imageVersions.find((version) => version.selected);
             return {
               ...creation,
-              illustrationStatus:
-                selectedVersion?.generationSource === "refinement"
-                  ? ("refining" as const)
-                  : selectedVersion
-                    ? ("direction_selected" as const)
-                    : creation.imageVersions.length
-                      ? ("options_ready" as const)
-                      : ("prompt_ready" as const),
+              illustrationStatus: getRestingIllustrationStatus(creation),
               chatHistory: [
                 ...creation.chatHistory,
                 createPageChatMessage(
@@ -451,6 +444,47 @@ export function restorePageAfterGenerationFailure(
               ],
             };
           },
+          false,
+        ),
+      )
+    : state;
+}
+
+export function restorePageAfterVisualJob(
+  state: PersistedStudioState,
+  projectId: string,
+  pageBeatId: string,
+) {
+  const project = state.projects.find((candidate) => candidate.id === projectId);
+  return project
+    ? replaceProject(
+        state,
+        updateProjectPageCreation(
+          project,
+          pageBeatId,
+          (creation) => ({
+            ...creation,
+            illustrationStatus: getRestingIllustrationStatus(creation),
+          }),
+          false,
+        ),
+      )
+    : state;
+}
+
+export function markPageRefinementStarted(
+  state: PersistedStudioState,
+  projectId: string,
+  pageBeatId: string,
+) {
+  const project = state.projects.find((candidate) => candidate.id === projectId);
+  return project
+    ? replaceProject(
+        state,
+        updateProjectPageCreation(
+          project,
+          pageBeatId,
+          (creation) => ({ ...creation, illustrationStatus: "refining" }),
           false,
         ),
       )

@@ -19,6 +19,7 @@ export interface GeneratePageImagesRequest {
 export type ImageGenerationErrorCode =
   | "INVALID_REQUEST"
   | "GENERATION_FAILED"
+  | "CANCELLED"
   | "NOT_IMPLEMENTED";
 
 export class ImageGenerationError extends Error {
@@ -46,8 +47,18 @@ export interface ImageGenerationResult {
   versions: ImageVersion[];
 }
 
+export interface ImageGenerationCallOptions {
+  signal?: AbortSignal;
+}
+
 /** Provider boundary for future initial, multi-option, reference-aware, and refinement workflows. */
 export interface ImageGenerationService {
-  generate(request: GeneratePageImagesRequest): Promise<ImageGenerationResult>;
-  refine(request: RefinePageImageRequest): Promise<ImageGenerationResult>;
+  generate(
+    request: GeneratePageImagesRequest,
+    options?: ImageGenerationCallOptions,
+  ): Promise<ImageGenerationResult>;
+  refine(
+    request: RefinePageImageRequest,
+    options?: ImageGenerationCallOptions,
+  ): Promise<ImageGenerationResult>;
 }

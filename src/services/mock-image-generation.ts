@@ -3,6 +3,7 @@ import {
   type GeneratePageImagesRequest,
   type ImageGenerationResult,
   type ImageGenerationService,
+  type ImageGenerationCallOptions,
   type RefinePageImageRequest,
 } from "@/services/image-generation";
 import type { ImageVersion, PageAspectRatio } from "@/types/domain";
@@ -166,7 +167,37 @@ function createRefinementSvg(request: RefinePageImageRequest, seed: string) {
 }
 
 export class MockImageGenerationService implements ImageGenerationService {
-  async generate(request: GeneratePageImagesRequest): Promise<ImageGenerationResult> {
+  constructor(private readonly delayMs = 140) {}
+
+  private wait(options?: ImageGenerationCallOptions) {
+    const signal = options?.signal;
+    if (signal?.aborted) {
+      return Promise.reject(
+        new ImageGenerationError("CANCELLED", "The prototype visual operation was cancelled."),
+      );
+    }
+    return new Promise<void>((resolve, reject) => {
+      const onAbort = () => {
+        clearTimeout(timer);
+        reject(
+          new ImageGenerationError(
+            "CANCELLED",
+            "The prototype visual operation was cancelled.",
+          ),
+        );
+      };
+      const timer = setTimeout(() => {
+        signal?.removeEventListener("abort", onAbort);
+        resolve();
+      }, this.delayMs);
+      signal?.addEventListener("abort", onAbort, { once: true });
+    });
+  }
+
+  async generate(
+    request: GeneratePageImagesRequest,
+    options?: ImageGenerationCallOptions,
+  ): Promise<ImageGenerationResult> {
     if (
       !request.projectId ||
       !request.pageId ||
@@ -181,7 +212,7 @@ export class MockImageGenerationService implements ImageGenerationService {
       );
     }
 
-    await new Promise((resolve) => setTimeout(resolve, 140));
+    await this.wait(options);
 
     const batchSeed = `${request.projectId}:${request.pageId}:${request.batchNumber}`;
     const generationBatchId = `batch-${hashText(batchSeed)}`;
@@ -216,7 +247,10 @@ export class MockImageGenerationService implements ImageGenerationService {
     return { generationBatchId, versions };
   }
 
-  async refine(request: RefinePageImageRequest): Promise<ImageGenerationResult> {
+  async refine(
+    request: RefinePageImageRequest,
+    options?: ImageGenerationCallOptions,
+  ): Promise<ImageGenerationResult> {
     const parent = request.parentVersion;
     if (
       !request.projectId ||
@@ -233,7 +267,7 @@ export class MockImageGenerationService implements ImageGenerationService {
       );
     }
 
-    await new Promise((resolve) => setTimeout(resolve, 140));
+    await this.wait(options);
 
     const seedSource = `${request.projectId}:${request.pageId}:${parent.id}:${request.refinementSequence}:${request.refinementInstructions}`;
     const visualSeed = hashText(seedSource);

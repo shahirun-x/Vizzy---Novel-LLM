@@ -315,6 +315,17 @@ export function getIllustrationProgress(plan: StoryPlan | null) {
   return { approved, total: pages.length, complete: pages.length > 0 && approved === pages.length };
 }
 
+export function getRestingIllustrationStatus(creation: PageCreationState) {
+  if (creation.approvedImageVersionId) return "illustration_approved" as const;
+  const selectedVersion = creation.imageVersions.find((version) => version.selected);
+  if (selectedVersion?.generationSource === "refinement") return "refining" as const;
+  if (selectedVersion) return "direction_selected" as const;
+  if (creation.imageVersions.length) return "options_ready" as const;
+  return creation.prompt.automaticPrompt.trim() || creation.prompt.editedPrompt?.trim()
+    ? ("prompt_ready" as const)
+    : ("not_started" as const);
+}
+
 export function saveEditedPrompt(
   creation: PageCreationState,
   prompt: string,

@@ -14,7 +14,8 @@ export function createApplicationServices(
   overrides: Partial<ApplicationServices> = {},
 ): ApplicationServices {
   return {
-    imageGeneration: overrides.imageGeneration ?? new MockImageGenerationService(),
+    // Long enough for the prototype UI to expose honest loading and cancellation states.
+    imageGeneration: overrides.imageGeneration ?? new MockImageGenerationService(1_500),
     persistence: overrides.persistence ?? createBrowserStudioPersistence(),
   };
 }

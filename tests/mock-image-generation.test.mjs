@@ -91,3 +91,16 @@ test("mock generation rejects any request that is not an exact three-option batc
     (error) => error.code === "INVALID_REQUEST",
   );
 });
+
+test("mock generation cooperatively cancels without producing a result", async () => {
+  const service = new MockImageGenerationService(10_000);
+  const controller = new AbortController();
+  const pending = service.generate(request(), { signal: controller.signal });
+
+  controller.abort();
+
+  await assert.rejects(
+    pending,
+    (error) => error.code === "CANCELLED",
+  );
+});

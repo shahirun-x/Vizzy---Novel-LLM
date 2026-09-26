@@ -2,11 +2,13 @@
 
 import { useState } from "react";
 import { PrototypeImage } from "@/components/storyboard/visual-generation-panel";
+import { VisualJobStatus } from "@/components/storyboard/visual-job-status";
 import {
   getImageVersionLineage,
   type ImageVersionLineageNode,
 } from "@/lib/page-creation";
 import type { ImageVersion, PageBeat } from "@/types/domain";
+import type { GenerationJob } from "@/types/generation-job";
 
 const QUICK_REFINEMENTS = [
   "Closer shot",
@@ -121,6 +123,9 @@ interface VisualRefinementPanelProps {
   onApprove: () => void;
   onReopen: () => void;
   onContinue: () => void;
+  job: GenerationJob | null;
+  onCancelJob: (jobId: string) => void;
+  onRetryJob: (jobId: string) => Promise<string | null>;
 }
 
 export function VisualRefinementPanel({
@@ -132,9 +137,11 @@ export function VisualRefinementPanel({
   onApprove,
   onReopen,
   onContinue,
+  job,
+  onCancelJob,
+  onRetryJob,
 }: VisualRefinementPanelProps) {
   const [draft, setDraft] = useState("");
-  const [isRefining, setIsRefining] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [comparisonVersionId, setComparisonVersionId] = useState<string | null>(null);
   const versions = page.creation.imageVersions;
@@ -148,21 +155,21 @@ export function VisualRefinementPanel({
     : null;
   const lineage = getImageVersionLineage(versions);
   const locked = Boolean(page.creation.approvedImageVersionId);
+  const isRefining = job?.status === "queued" || job?.status === "running";
 
   async function createRefinement() {
     if (!selectedVersion || !draft.trim() || isRefining || locked) return;
-    setIsRefining(true);
     setErrorMessage(null);
     try {
       const childId = await onRefine(draft);
       setComparisonVersionId(childId);
       setDraft("");
     } catch (error) {
-      setErrorMessage(
-        error instanceof Error ? error.message : "The prototype refinement could not be created.",
-      );
-    } finally {
-      setIsRefining(false);
+      if (!(error && typeof error === "object" && "category" in error)) {
+        setErrorMessage(
+          error instanceof Error ? error.message : "The prototype refinement could not be created.",
+        );
+      }
     }
   }
 
@@ -183,6 +190,8 @@ export function VisualRefinementPanel({
           </span>
         )}
       </div>
+
+      <VisualJobStatus job={job} onCancel={onCancelJob} onRetry={onRetryJob} />
 
       {locked && approvedVersion ? (
         <div className="mt-4 rounded-2xl border border-[#657053]/20 bg-[#e5eddc] p-4">

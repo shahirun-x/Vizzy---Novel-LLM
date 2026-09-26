@@ -6,6 +6,7 @@
 /out/
 /.turbo/
 /coverage/
+/.vercel/
 
 # production output
 /build

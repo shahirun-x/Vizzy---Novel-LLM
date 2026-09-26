@@ -7,6 +7,7 @@ import { VisualGenerationPanel } from "@/components/storyboard/visual-generation
 import { VisualRefinementPanel } from "@/components/storyboard/visual-refinement-panel";
 import { getOutputTypeLabel } from "@/lib/onboarding";
 import { getIllustrationProgress } from "@/lib/page-creation";
+import { getLatestPageGenerationJob } from "@/lib/generation-jobs";
 import type {
   PageBeat,
   PageCreativeSettings,
@@ -14,6 +15,7 @@ import type {
   VisualReferenceMetadata,
   VisualReferencePurpose,
 } from "@/types/domain";
+import type { GenerationJob } from "@/types/generation-job";
 
 interface PageCreationWorkspaceProps {
   project: Project;
@@ -32,6 +34,9 @@ interface PageCreationWorkspaceProps {
   onRefineImageVersion: (instruction: string) => Promise<string>;
   onApproveIllustration: () => void;
   onReopenIllustration: () => void;
+  generationJobs: GenerationJob[];
+  onCancelGenerationJob: (jobId: string) => void;
+  onRetryGenerationJob: (jobId: string) => Promise<string | null>;
 }
 
 const fieldClass =
@@ -243,11 +248,26 @@ export function PageCreationWorkspace({
   onRefineImageVersion,
   onApproveIllustration,
   onReopenIllustration,
+  generationJobs,
+  onCancelGenerationJob,
+  onRetryGenerationJob,
 }: PageCreationWorkspaceProps) {
   const pages = [...(project.storyPlan?.pageBeats ?? [])].sort((a, b) => a.order - b.order);
   const pageIndex = pages.findIndex((candidate) => candidate.id === page.id);
   const isApproved = Boolean(page.creation.approvedImageVersionId);
   const progress = getIllustrationProgress(project.storyPlan);
+  const generationJob = getLatestPageGenerationJob(
+    generationJobs,
+    project.id,
+    page.id,
+    "initial_generation",
+  );
+  const refinementJob = getLatestPageGenerationJob(
+    generationJobs,
+    project.id,
+    page.id,
+    "refinement",
+  );
   const aspectClass =
     (page.creation.imageVersions.find((version) => version.selected)?.aspectRatio ??
       page.creation.imageVersions.at(-1)?.aspectRatio ??
@@ -364,6 +384,9 @@ export function PageCreationWorkspace({
           page={page}
           onGenerate={onGenerateVisuals}
           onSelect={onSelectImageVersion}
+          job={generationJob}
+          onCancelJob={onCancelGenerationJob}
+          onRetryJob={onRetryGenerationJob}
         />
       </div>
 
@@ -377,6 +400,9 @@ export function PageCreationWorkspace({
           onApprove={onApproveIllustration}
           onReopen={onReopenIllustration}
           onContinue={() => onNavigate("next")}
+          job={refinementJob}
+          onCancelJob={onCancelGenerationJob}
+          onRetryJob={onRetryGenerationJob}
         />
       </div>
 

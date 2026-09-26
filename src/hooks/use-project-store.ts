@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useMemo, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
+import { recoverInterruptedGenerationJobs } from "@/lib/generation-jobs";
 import { createProject } from "@/lib/onboarding";
 import {
   addProjectPageInstruction,
@@ -8,21 +9,17 @@ import {
   addProjectToStudio,
   addSelectedProjectPageBeat,
   answerSelectedProjectOnboarding,
-  appendPageGenerationResult,
-  appendPageRefinementResult,
   approveProjectPageIllustration,
   approveSelectedProjectStoryPlan,
   changeStudioView,
   deleteSelectedProjectPageBeat,
   generateSelectedProjectStoryPlan,
-  markPageGenerationStarted,
   moveSelectedProjectPageBeat,
   navigateProjectPageCreation,
   openProjectPageCreation,
   removeProjectPageReference,
   reopenProjectPageIllustration,
   resetProjectPagePrompt,
-  restorePageAfterGenerationFailure,
   saveProjectPagePrompt,
   selectProjectPage,
   selectProjectPageImageVersion,
@@ -40,11 +37,9 @@ import {
   defaultApplicationServices,
   type ApplicationServices,
 } from "@/services/application-services";
-import { ImageGenerationError } from "@/services/image-generation";
+import { GenerationJobCoordinator } from "@/services/generation-job-coordinator";
 import {
   ImageGenerationOrchestrator,
-  preparePageGeneration,
-  preparePageRefinement,
 } from "@/services/image-generation-orchestrator";
 import type {
   PageBeat,
@@ -68,15 +63,32 @@ export function useProjectStore(services: ApplicationServices = defaultApplicati
     () => new ImageGenerationOrchestrator(imageGeneration),
     [imageGeneration],
   );
+  const stateGateway = useMemo(
+    () => ({
+      read: () => parseStudioSnapshot(persistence.getSnapshot()),
+      update: (updater: (current: PersistedStudioState) => PersistedStudioState) => {
+        persistence.write(updater(parseStudioSnapshot(persistence.getSnapshot())));
+      },
+    }),
+    [persistence],
+  );
+  const jobCoordinator = useMemo(
+    () => new GenerationJobCoordinator(orchestrator, stateGateway),
+    [orchestrator, stateGateway],
+  );
   const selectedProject =
     state.projects.find((project) => project.id === state.selectedProjectId) ?? null;
 
   const updateState = useCallback(
     (updater: (current: PersistedStudioState) => PersistedStudioState) => {
-      persistence.write(updater(parseStudioSnapshot(persistence.getSnapshot())));
+      stateGateway.update(updater);
     },
-    [persistence],
+    [stateGateway],
   );
+
+  useEffect(() => {
+    updateState((current) => recoverInterruptedGenerationJobs(current));
+  }, [updateState]);
 
   const addProject = useCallback(() => {
     updateState((current) => addProjectToStudio(current, createProject()));
@@ -183,39 +195,10 @@ export function useProjectStore(services: ApplicationServices = defaultApplicati
       const project = current.projects.find(
         (candidate) => candidate.id === current.selectedProjectId,
       );
-      if (!project) {
-        throw new ImageGenerationError(
-          "INVALID_REQUEST",
-          "Only an approved page can prepare visual options.",
-        );
-      }
-      const operation = preparePageGeneration(project, pageBeatId);
-
-      updateState((before) => markPageGenerationStarted(before, project.id, pageBeatId));
-      try {
-        const result = await orchestrator.generate(operation);
-        updateState((after) =>
-          appendPageGenerationResult(
-            after,
-            project.id,
-            pageBeatId,
-            result.versions,
-            operation.batchNumber,
-          ),
-        );
-      } catch (error) {
-        updateState((after) =>
-          restorePageAfterGenerationFailure(after, project.id, pageBeatId),
-        );
-        throw error instanceof ImageGenerationError
-          ? error
-          : new ImageGenerationError(
-              "GENERATION_FAILED",
-              "The prototype visual service could not prepare this set.",
-            );
-      }
+      if (!project) throw new Error("Only an approved page can prepare visual options.");
+      await jobCoordinator.startInitialGeneration(project.id, pageBeatId);
     },
-    [orchestrator, persistence, updateState],
+    [jobCoordinator, persistence],
   );
 
   const selectPageImageVersion = useCallback(
@@ -232,37 +215,24 @@ export function useProjectStore(services: ApplicationServices = defaultApplicati
       const project = current.projects.find(
         (candidate) => candidate.id === current.selectedProjectId,
       );
-      if (!project) {
-        throw new ImageGenerationError(
-          "INVALID_REQUEST",
-          "Select a visual version before creating a refinement.",
-        );
-      }
-      const operation = preparePageRefinement(project, pageBeatId, refinementInstruction);
-
-      try {
-        const result = await orchestrator.refine(operation);
-        const child = result.versions[0];
-        updateState((after) =>
-          appendPageRefinementResult(
-            after,
-            project.id,
-            pageBeatId,
-            child,
-            refinementInstruction,
-          ),
-        );
-        return child.id;
-      } catch (error) {
-        throw error instanceof ImageGenerationError
-          ? error
-          : new ImageGenerationError(
-              "GENERATION_FAILED",
-              "The prototype refinement service could not create this version.",
-            );
-      }
+      if (!project) throw new Error("Select a visual version before creating a refinement.");
+      return jobCoordinator.startRefinement(
+        project.id,
+        pageBeatId,
+        refinementInstruction,
+      );
     },
-    [orchestrator, persistence, updateState],
+    [jobCoordinator, persistence],
+  );
+
+  const cancelGenerationJob = useCallback(
+    (jobId: string) => jobCoordinator.cancel(jobId),
+    [jobCoordinator],
+  );
+
+  const retryGenerationJob = useCallback(
+    (jobId: string) => jobCoordinator.retry(jobId),
+    [jobCoordinator],
   );
 
   const approvePageIllustration = useCallback(
@@ -326,6 +296,7 @@ export function useProjectStore(services: ApplicationServices = defaultApplicati
     projects: state.projects,
     selectedProject,
     activeView: state.activeView,
+    generationJobs: state.generationJobs,
     addProject,
     selectProject,
     setActiveView,
@@ -344,6 +315,8 @@ export function useProjectStore(services: ApplicationServices = defaultApplicati
     generatePageVisualOptions,
     selectPageImageVersion,
     refinePageImageVersion,
+    cancelGenerationJob,
+    retryGenerationJob,
     approvePageIllustration,
     reopenPageIllustration,
     updatePageBeat,
