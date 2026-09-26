@@ -4,7 +4,7 @@ Vizzy is a conversational creative studio for making graphic novels, storyboards
 
 ## Current status
 
-Vizzy is a complete working prototype through Phase 2.0B asynchronous generation-job readiness. It supports:
+Vizzy is a complete working prototype through Phase 2.1A AI-native story direction. It supports:
 
 - Multiple local projects
 - Deterministic chat-based creative onboarding
@@ -34,8 +34,11 @@ Vizzy is a complete working prototype through Phase 2.0B asynchronous generation
 - Portable visual-book ZIP exports with a versioned manifest and self-contained offline player
 - Feature-detected, client-side WebM slideshow recording with progress and cancellation
 - Versioned browser-local persistence
+- One-prompt AI story direction through a server-only OpenAI Responses API integration
+- Schema-validated story, visual identity, character continuity, narration, dialogue, and approved page plans
+- Cancel, retry, deduplication, interruption recovery, and atomic application for paid story jobs
 
-The prototype intentionally has no external AI or image provider, authentication, database, billing, MP4/audio generation, or production story-planning service. All displayed visuals are clearly labelled local SVG demo compositions.
+The Story Director can use OpenAI when server credentials are configured. Image generation remains the deterministic local SVG prototype; Vizzy has no real image provider, authentication, database, billing, or MP4/audio generation.
 
 ## Stack
 
@@ -68,17 +71,19 @@ npm run lint      # Run ESLint
 npm run typecheck # Run TypeScript without emitting files
 npm run build     # Create a production build
 npm run start     # Run the production build
+npm run test:openai # Opt-in paid OpenAI Structured Outputs smoke test
 ```
 
 ## Deploying to Vercel
 
-Vizzy uses the standard Next.js App Router layout and is ready for Vercel's zero-configuration Next.js deployment. No environment variables or external services are required for the current deterministic prototype.
+Vizzy uses the standard Next.js App Router layout and is ready for Vercel's Next.js deployment. Manual creation and local prototype imagery require no external service. AI story direction requires server environment variables.
 
 1. Import `shahirun-x/Vizzy---Novel-LLM` in the Vercel dashboard.
 2. Keep the detected framework preset as **Next.js** and the root directory as the repository root.
 3. Keep the default npm install and `npm run build` settings.
 4. Use `main` as the production branch. Feature-branch pushes can remain preview deployments until reviewed and merged.
-5. Deploy. Browser-local projects and generation-job history are isolated to each visitor's browser profile.
+5. For AI creation, configure `OPENAI_API_KEY`, optionally `OPENAI_TEXT_MODEL`, and `VIZZY_AI_ACCESS_CODE` in Vercel. The access code is mandatory on Vercel so deployments are not unrestricted paid endpoints.
+6. Deploy. Browser-local projects and generation-job history are isolated to each visitor's browser profile.
 
 A `vercel.json` file is intentionally unnecessary: framework detection, build output, and routing all use supported Next.js defaults. Local `.vercel` project metadata is ignored and must not be committed.
 
@@ -102,6 +107,8 @@ src/
 The App Router page remains a Server Component. `StudioShell` is the explicit client boundary because project interactions and browser storage require client APIs. Business rules remain in framework-independent modules.
 
 ## Prototype workflow
+
+The primary path is **Create with AI**: enter one story prompt, optionally choose format, page count (default 3), style, aspect ratio, and reference notes, then review the complete approved plan and continue to illustration. **Manual setup** preserves the original guided onboarding flow below.
 
 1. Create a project.
 2. Complete creative onboarding through chat.
@@ -183,7 +190,7 @@ See [docs/architecture.md](docs/architecture.md) for the dependency flow and rep
 
 The complete prototype state is stored in browser `localStorage` under `vizzy:studio-state` by the default `StudioPersistence` adapter. It persists projects, selection, workspace view, onboarding, Style Bible, chat histories, story plans, page edits and ordering, approval state, selected page, page creative settings, prepared prompts, reference metadata, and page conversations. Reader playback, timing, captions, looping, and the current reader page remain temporary UI state and do not alter project records.
 
-The storage envelope is now version 6. `src/lib/project-storage.ts` accepts version-1 through version-6 snapshots, adds missing planning, page-creation, visual-version, lineage, approval, or generation-job fields, and preserves existing story, style, character, selection, chat, plan, page, and generation-history data. Generation jobs persist their request snapshot, attempt lineage, timestamps, terminal error details, and result identifiers. Migrated state is written as version 6 on the next state change.
+The storage envelope is now version 7. `src/lib/project-storage.ts` accepts version-1 through version-7 snapshots, adds missing planning, page-creation, visual-version, lineage, approval, generation-job, and AI story fields, and preserves existing story data. Story access codes and API keys are never persisted.
 
 Queued and running jobs recovered after a reload are marked `interrupted`; the app never claims that browser-local work continued in the background. The user can explicitly retry an interrupted, failed, or cancelled job when its captured page context is still applicable. A retry receives a new job ID and links back to the earlier attempt while reusing the original idempotency key and exact provider-independent request.
 
@@ -193,7 +200,7 @@ Data remains local to the current browser profile and device. Clearing site data
 
 ## Current limitations
 
-- Planning is structural and deterministic, not generative AI.
+- Manual planning remains structural and deterministic; AI creation requires configured server credentials.
 - The planner recognizes structured sequences through numbered or bulleted lines; it does not deeply interpret scripts.
 - Plans are limited to 30 pages for prototype usability.
 - Page cards represent full illustrated pages, not nested comic panels.
@@ -205,7 +212,7 @@ Data remains local to the current browser profile and device. Clearing site data
 - Export supports embedded SVG, PNG, JPEG, and WebP approved artwork. The current prototype generator produces local SVG data URLs.
 - WebM availability depends on `MediaRecorder`, canvas `captureStream`, and an advertised WebM codec. Recording occurs in real time and requires the tab to remain open.
 - The prototype does not export MP4, generate voiceover, add audio, or perform server-side encoding.
-- There is no cloud sync, collaboration, authentication, or database.
+- There is no cloud sync, collaboration, authentication, or database. The access-code gate and in-memory rate limit are milestone safeguards, not a replacement for production identity, quotas, or durable distributed rate limiting.
 
 ## Planned architecture
 
@@ -234,6 +241,8 @@ To test a package, extract the ZIP completely and open `index.html` in a browser
 
 This milestone completes the local working prototype. It is not the production AI-powered MVP: provider integrations, authentication, cloud persistence, collaboration, billing, scalable media processing, import, and production security hardening remain future work.
 
-## Environment
+## AI Story Director environment
 
-No environment variables are required. Copy `.env.example` to `.env.local` only when a future integration documents a need for it. Never commit secrets.
+Copy `.env.example` to `.env.local` and set `OPENAI_API_KEY` to enable AI creation locally. `OPENAI_TEXT_MODEL` defaults to `gpt-6-astra`. Vercel deployments also require `VIZZY_AI_ACCESS_CODE`; the code is entered per request and is not saved. All three values are server-only—never expose them through `NEXT_PUBLIC_*` or commit `.env.local`.
+
+The app makes one OpenAI Responses API call per story and validates Structured Outputs with Zod before applying anything. `store: false` is set explicitly. Run `npm run test:openai` without flags to confirm the paid test is skipped; only `RUN_OPENAI_INTEGRATION=1 npm run test:openai` makes a live request.

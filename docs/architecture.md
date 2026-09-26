@@ -1,8 +1,20 @@
 # Vizzy architecture
 
+## Phase 2.1A AI Story Director
+
+`StoryDirectorService` is an injectable application boundary. The browser adapter calls the same-origin `/api/story-director` Route Handler; only `OpenAIStoryDirector` imports the OpenAI SDK and `server-only`. The route validates bounded input, applies a best-effort per-instance rate limit, uses a timing-safe deployment access-code check, forwards cancellation, and returns sanitized errors. On Vercel the endpoint remains unavailable until `VIZZY_AI_ACCESS_CODE` is configured.
+
+The OpenAI adapter uses the Responses API, `responses.parse`, `zodTextFormat`, and `store: false`. The resulting story must pass strict Zod validation, exact format/page-count checks, unique identity checks, consecutive ordering, and character-reference integrity before conversion.
+
+The structured contract contains project title, synopsis, genre, premise, and format; a visual Story Bible with style, palette, mood, atmosphere, direction, and continuity rules; characters with stable source IDs, roles, appearance, costume, features, and continuity notes; a beginning/middle/ending plan; and ordered pages containing final narration/dialogue, character references, setting, lighting, camera, composition, tone, and illustration instructions. All object keys are required for provider compatibility; intentionally unused narration or dialogue is represented by an empty string.
+
+`StoryGenerationCoordinator` reuses the version-7 persisted generation-job envelope and pure lifecycle transitions. A story request is registered before provider work, supports cancellation and explicit retry lineage, prevents duplicate active work, becomes `interrupted` after reload, and applies the complete generated project plus terminal success metadata in one state update. Failed, invalid, cancelled, stale, or late results never create a partial project. Access codes and live `AbortController` instances are never serialized.
+
+`createProjectFromGeneratedStory` is the pure adapter from the provider-neutral specification into Vizzy's existing project, Style Bible, character, StoryPlan, PageBeat, and PageCreation models. It approves the plan and prepares deterministic illustration prompts, but creates no images. The existing mock image service remains the default and manual onboarding remains fully available.
+
 ## Phase 2.0B generation-job lifecycle
 
-The studio keeps one authoritative version-6 state tree while separating persisted job state, pure domain transitions, live request control, storage, and the services that produce images.
+The studio keeps one authoritative version-7 state tree while separating persisted job state, pure domain transitions, live request control, storage, and the services that produce images.
 
 ```text
 Studio components
@@ -44,7 +56,7 @@ Existing lower-level deterministic modules remain responsible for their establis
 
 ### Persistence
 
-`StudioPersistence` exposes only snapshot subscription, client/server snapshot reads, and writes. `createBrowserStudioPersistence` is the prototype adapter and keeps the existing `vizzy:studio-state` local-storage key and same-tab change event. Parsing and version-1-through-version-6 migration remain in `project-storage.ts`. Version 6 adds persisted generation jobs while preserving all version-5 project and image-history data.
+`StudioPersistence` exposes only snapshot subscription, client/server snapshot reads, and writes. `createBrowserStudioPersistence` is the prototype adapter and keeps the existing `vizzy:studio-state` local-storage key and same-tab change event. Parsing and version-1-through-version-7 migration remain in `project-storage.ts`. Version 6 added persisted generation jobs; version 7 adds AI story jobs and richer continuity fields while preserving earlier project and image-history data.
 
 On application restoration, any persisted `queued` or `running` job becomes `interrupted` with an honest recovery message. Work does not silently resume. Explicit retry first revalidates the original snapshot, then creates a new linked attempt. Completed and failed job metadata survives reload for status display and diagnosis.
 
@@ -60,6 +72,6 @@ const services = createApplicationServices({
 });
 ```
 
-`defaultApplicationServices` already supplies this mock and browser persistence, so the application needs no API key. To integrate a future real provider, implement `ImageGenerationService`, create application services with that implementation, and pass the services to `useProjectStore`. UI command names, domain transitions, version history, approval, reader, and export do not need to change.
+`defaultApplicationServices` supplies this mock, the browser persistence adapter, and the same-origin remote Story Director client. Manual creation and mock imagery need no API key; only the server-side AI story route requires one. A future real image provider can implement `ImageGenerationService` without changing UI command names, version history, approval, reader, or export.
 
-No real AI provider is connected. Jobs are durable only in browser-local persistence, and cancellation cannot guarantee that a remote provider avoided doing work. Provider-side idempotency, server queues, automatic retry/backoff, authentication, billing, and cloud persistence remain future integration concerns.
+OpenAI is connected only for story direction when explicitly configured. Image generation still uses the local mock. Jobs are durable only in browser-local persistence, and cancellation cannot guarantee that a remote provider avoided doing work. Provider-side idempotency, server queues, automatic retry/backoff, authentication, billing, durable distributed rate limiting, and cloud persistence remain future integration concerns.

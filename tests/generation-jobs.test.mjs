@@ -539,7 +539,7 @@ test("completed job metadata survives serialization and version-5 migrates safel
   await pending;
 
   const restored = projectStorage.parseStudioSnapshot(JSON.stringify(harness.state));
-  assert.equal(restored.version, 6);
+  assert.equal(restored.version, 7);
   assert.equal(restored.generationJobs[0].status, "succeeded");
   assert.deepEqual(restored.generationJobs[0].resultVersionIds, [
     "persisted-option-1",
@@ -550,7 +550,7 @@ test("completed job metadata survives serialization and version-5 migrates safel
   const version5 = { ...harness.state, version: 5 };
   delete version5.generationJobs;
   const migrated = projectStorage.migrateStudioState(version5);
-  assert.equal(migrated.version, 6);
+  assert.equal(migrated.version, 7);
   assert.deepEqual(migrated.generationJobs, []);
   assert.equal(migrated.projects[0].storyPlan.pageBeats[0].creation.imageVersions.length, 3);
 });

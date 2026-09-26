@@ -47,7 +47,7 @@ const sprint11Project = {
   chatHistory: [],
 };
 
-test("migrates the visual-book reader workspace into storage schema version 6", () => {
+test("migrates the visual-book reader workspace into storage schema version 7", () => {
   const migrated = migrateStudioState({
     version: 5,
     projects: [sprint11Project],
@@ -55,7 +55,7 @@ test("migrates the visual-book reader workspace into storage schema version 6", 
     activeView: "reader",
   });
 
-  assert.equal(migrated.version, 6);
+  assert.equal(migrated.version, 7);
   assert.deepEqual(migrated.generationJobs, []);
   assert.equal(migrated.activeView, "reader");
 });
@@ -68,7 +68,7 @@ test("migrates a Sprint 1.1 version-1 envelope without losing project data", () 
     activeView: "story",
   });
 
-  assert.equal(migrated.version, 6);
+  assert.equal(migrated.version, 7);
   assert.deepEqual(migrated.generationJobs, []);
   assert.equal(migrated.projects[0].title, "Existing Story");
   assert.equal(migrated.projects[0].description, sprint11Project.description);
@@ -111,7 +111,7 @@ test("migrates and restores a version-2 planning state with page creation defaul
   version2.version = 2;
 
   const restored = parseStudioSnapshot(JSON.stringify(version2));
-  assert.equal(restored.version, 6);
+  assert.equal(restored.version, 7);
   assert.equal(restored.activeView, "planning");
   assert.equal(restored.projects[0].selectedPageBeatId, "beat-2");
   assert.equal(restored.projects[0].storyPlan.id, "plan-1");
@@ -169,7 +169,7 @@ test("preserves version-3 page prompt, references, chat, and selected workspace"
   assert.equal(creation.chatHistory[0].content, "Keep the rain");
 });
 
-test("migrates version-4 image history into version 6 without losing generated options", () => {
+test("migrates version-4 image history into version 7 without losing generated options", () => {
   const migrated = migrateStudioState({
     version: 4,
     projects: [
@@ -226,7 +226,7 @@ test("migrates version-4 image history into version 6 without losing generated o
   });
 
   const image = migrated.projects[0].storyPlan.pageBeats[0].creation.imageVersions[0];
-  assert.equal(migrated.version, 6);
+  assert.equal(migrated.version, 7);
   assert.equal(image.prompt, "Exact legacy prompt");
   assert.equal(image.aspectRatio, "16:9");
   assert.equal(image.batchNumber, 1);
@@ -242,7 +242,7 @@ test("migrates version-4 image history into version 6 without losing generated o
   );
 });
 
-test("version-5 refinement lineage and page approval migrate into version 6", () => {
+test("version-5 refinement lineage and page approval migrate into version 7", () => {
   const creation = pageCreation.createDefaultPageCreationState();
   const original = {
     id: "image-root",
@@ -325,7 +325,7 @@ test("version-5 refinement lineage and page approval migrate into version 6", ()
 
   const restored = parseStudioSnapshot(JSON.stringify(snapshot));
   const restoredCreation = restored.projects[0].storyPlan.pageBeats[0].creation;
-  assert.equal(restored.version, 6);
+  assert.equal(restored.version, 7);
   assert.deepEqual(restored.generationJobs, []);
   assert.equal(restoredCreation.imageVersions.length, 2);
   assert.equal(restoredCreation.imageVersions[1].parentVersionId, original.id);

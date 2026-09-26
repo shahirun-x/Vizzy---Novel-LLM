@@ -74,6 +74,30 @@ export function StyleBiblePanel({ project, onChange }: StyleBiblePanelProps) {
             onChange={(palette) => onChange({ palette })}
           />
           <Field
+            label="Atmosphere"
+            value={project.styleBible.atmosphere}
+            placeholder="Weather, texture, ambience, and environmental feeling"
+            onChange={(atmosphere) => onChange({ atmosphere })}
+          />
+          <div className="sm:col-span-2">
+            <Field
+              label="Visual direction"
+              value={project.styleBible.visualDirection}
+              placeholder="Framing, rendering, shape language, and visual storytelling rules"
+              onChange={(visualDirection) => onChange({ visualDirection })}
+              rows={4}
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <Field
+              label="Continuity instructions"
+              value={project.styleBible.continuityInstructions}
+              placeholder="Recurring wardrobe, props, locations, scale, and lighting rules"
+              onChange={(continuityInstructions) => onChange({ continuityInstructions })}
+              rows={4}
+            />
+          </div>
+          <Field
             label="Visual references"
             value={project.styleBible.visualReferences}
             placeholder="Artists, films, photography, eras, or reference notes"

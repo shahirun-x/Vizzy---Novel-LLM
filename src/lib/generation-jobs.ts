@@ -129,6 +129,7 @@ export function createQueuedGenerationJob({
     error: null,
     resultBatchId: null,
     resultVersionIds: [],
+    resultProjectId: null,
   };
 }
 
@@ -215,9 +216,10 @@ export function startGenerationJob(
     startedAt,
     error: null,
   }));
+  if (job.operationType === "story_generation") return withStatus;
   return job.operationType === "initial_generation"
-    ? markPageGenerationStarted(withStatus, job.projectId, job.pageId)
-    : markPageRefinementStarted(withStatus, job.projectId, job.pageId);
+    ? markPageGenerationStarted(withStatus, job.projectId, job.pageId!)
+    : markPageRefinementStarted(withStatus, job.projectId, job.pageId!);
 }
 
 function errorInfo(
@@ -235,7 +237,9 @@ export function cancelGenerationJob(
 ) {
   const job = getGenerationJob(state, jobId);
   if (!job || !ACTIVE_STATUSES.has(job.status)) return state;
-  const restored = restorePageAfterVisualJob(state, job.projectId, job.pageId);
+  const restored = job.pageId
+    ? restorePageAfterVisualJob(state, job.projectId, job.pageId)
+    : state;
   return updateJob(restored, jobId, (candidate) => ({
     ...candidate,
     status: "cancelled",
@@ -256,8 +260,9 @@ export function failGenerationJob(
 ) {
   const job = getGenerationJob(state, jobId);
   if (!job || !ACTIVE_STATUSES.has(job.status)) return state;
-  const restored =
-    error.category === "provider_error"
+  const restored = !job.pageId
+    ? state
+    : error.category === "provider_error"
       ? restorePageAfterGenerationFailure(state, job.projectId, job.pageId)
       : restorePageAfterVisualJob(state, job.projectId, job.pageId);
   return updateJob(restored, jobId, (candidate) => ({
@@ -276,7 +281,7 @@ export function recoverInterruptedGenerationJobs(
   if (!activeJobs.length) return state;
   let restored = state;
   for (const job of activeJobs) {
-    restored = restorePageAfterVisualJob(restored, job.projectId, job.pageId);
+    if (job.pageId) restored = restorePageAfterVisualJob(restored, job.projectId, job.pageId);
   }
   const activeIds = new Set(activeJobs.map((job) => job.id));
   return {
@@ -313,7 +318,7 @@ function selectedProjectAndPage(state: PersistedStudioState, job: GenerationJob)
 
 function sameCreativeContext(
   project: Project,
-  snapshot: GenerationRequestSnapshot,
+  snapshot: InitialGenerationRequestSnapshot | RefinementRequestSnapshot,
   currentReferences: unknown,
 ) {
   return (
@@ -399,6 +404,9 @@ export function assertJobRequestApplicable(
   state: PersistedStudioState,
   job: GenerationJob,
 ) {
+  if (job.requestSnapshot.operationType === "story_generation") {
+    throw new GenerationJobError("validation_error", "Story jobs use their own atomic result validation.", "INVALID_JOB_TYPE");
+  }
   if (job.requestSnapshot.operationType === "initial_generation") {
     return assertInitialContextApplicable(
       state,
@@ -545,7 +553,7 @@ export function applyInitialGenerationJobResult(
   const applied = appendPageGenerationResult(
     state,
     job.projectId,
-    job.pageId,
+    job.pageId!,
     result.versions,
     job.requestSnapshot.batchNumber,
   );
@@ -579,7 +587,7 @@ export function applyRefinementJobResult(
   const applied = appendPageRefinementResult(
     state,
     job.projectId,
-    job.pageId,
+    job.pageId!,
     child,
     job.requestSnapshot.refinementInstruction,
   );
@@ -605,6 +613,9 @@ export function prepareRetryOperation(
     );
   }
   const snapshot = job.requestSnapshot;
+  if (snapshot.operationType === "story_generation") {
+    throw new GenerationJobError("validation_error", "Story jobs use the Story Director retry path.", "INVALID_JOB_TYPE");
+  }
   if (snapshot.operationType === "initial_generation") {
     assertInitialContextApplicable(
       state,

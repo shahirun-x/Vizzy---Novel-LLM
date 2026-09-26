@@ -3,6 +3,7 @@ import { normalizePageCreationState } from "@/lib/page-creation";
 import type { GenerationJob } from "@/types/generation-job";
 
 export type StudioView =
+  | "ai_create"
   | "story"
   | "style_bible"
   | "characters"
@@ -12,7 +13,7 @@ export type StudioView =
   | "reader";
 
 export interface PersistedStudioState {
-  version: 6;
+  version: 7;
   projects: Project[];
   selectedProjectId: string | null;
   activeView: StudioView;
@@ -20,7 +21,7 @@ export interface PersistedStudioState {
 }
 
 export const EMPTY_STUDIO_STATE: PersistedStudioState = {
-  version: 6,
+  version: 7,
   projects: [],
   selectedProjectId: null,
   activeView: "story",
@@ -28,6 +29,7 @@ export const EMPTY_STUDIO_STATE: PersistedStudioState = {
 };
 
 const VALID_VIEWS = new Set<StudioView>([
+  "ai_create",
   "story",
   "style_bible",
   "characters",
@@ -43,13 +45,37 @@ function migrateProject(project: Project): Project {
         ...project.storyPlan,
         pageBeats: project.storyPlan.pageBeats.map((page) => ({
           ...page,
+          characterIds: Array.isArray(page.characterIds) ? page.characterIds : [],
+          location: page.location ?? "",
+          timeAndLighting: page.timeAndLighting ?? "",
           creation: normalizePageCreationState(page.creation),
         })),
+        beginning: project.storyPlan.beginning ?? "",
+        middle: project.storyPlan.middle ?? "",
+        ending: project.storyPlan.ending ?? "",
+        creationSource: project.storyPlan.creationSource ?? "manual",
       }
     : null;
 
   return {
     ...project,
+    genre: project.genre ?? "",
+    narrativePremise: project.narrativePremise ?? project.description ?? "",
+    creationSource: project.creationSource ?? "manual",
+    styleBible: {
+      ...project.styleBible,
+      atmosphere: project.styleBible.atmosphere ?? "",
+      visualDirection: project.styleBible.visualDirection ?? "",
+      continuityInstructions: project.styleBible.continuityInstructions ?? "",
+    },
+    characters: (project.characters ?? []).map((character) => ({
+      ...character,
+      role: character.role ?? "",
+      physicalDescription: character.physicalDescription ?? character.description ?? "",
+      clothing: character.clothing ?? "",
+      distinguishingFeatures: character.distinguishingFeatures ?? "",
+      continuityNotes: character.continuityNotes ?? "",
+    })),
     storyPlan,
     selectedPageBeatId: project.selectedPageBeatId ?? null,
     planningChatHistory: Array.isArray(project.planningChatHistory)
@@ -68,16 +94,19 @@ export function migrateStudioState(value: unknown): PersistedStudioState {
     activeView?: unknown;
     generationJobs?: unknown;
   };
-  if (![1, 2, 3, 4, 5, 6].includes(candidate.version ?? -1) || !Array.isArray(candidate.projects)) {
+  if (![1, 2, 3, 4, 5, 6, 7].includes(candidate.version ?? -1) || !Array.isArray(candidate.projects)) {
     return EMPTY_STUDIO_STATE;
   }
 
   const generationJobs = Array.isArray(candidate.generationJobs)
-    ? candidate.generationJobs.filter(isGenerationJob)
+    ? candidate.generationJobs.filter(isGenerationJob).map((job) => ({
+        ...job,
+        resultProjectId: job.resultProjectId ?? null,
+      }))
     : [];
 
   return {
-    version: 6,
+    version: 7,
     projects: candidate.projects.map(migrateProject),
     selectedProjectId:
       typeof candidate.selectedProjectId === "string" ? candidate.selectedProjectId : null,
@@ -128,6 +157,9 @@ function isGenerationJobError(value: unknown) {
 
 function isRequestSnapshot(value: unknown): value is GenerationJob["requestSnapshot"] {
   if (!isRecord(value)) return false;
+  if (value.operationType === "story_generation") {
+    return value.projectId === "story-director" && value.pageId === null && isRecord(value.request);
+  }
   const common =
     typeof value.projectId === "string" &&
     typeof value.pageId === "string" &&
@@ -169,8 +201,8 @@ function isGenerationJob(value: unknown): value is GenerationJob {
   return Boolean(
     typeof job.id === "string" &&
       typeof job.projectId === "string" &&
-      typeof job.pageId === "string" &&
-      (job.operationType === "initial_generation" || job.operationType === "refinement") &&
+      (typeof job.pageId === "string" || job.pageId === null) &&
+      (job.operationType === "initial_generation" || job.operationType === "refinement" || job.operationType === "story_generation") &&
       typeof job.status === "string" &&
       JOB_STATUSES.has(job.status) &&
       typeof job.createdAt === "string" &&
@@ -187,7 +219,8 @@ function isGenerationJob(value: unknown): value is GenerationJob {
       isGenerationJobError(job.error) &&
       isStringOrNull(job.resultBatchId) &&
       Array.isArray(job.resultVersionIds) &&
-      job.resultVersionIds.every((id) => typeof id === "string"),
+      job.resultVersionIds.every((id) => typeof id === "string") &&
+      (job.resultProjectId === undefined || isStringOrNull(job.resultProjectId)),
   );
 }
 

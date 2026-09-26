@@ -38,6 +38,7 @@ import {
   type ApplicationServices,
 } from "@/services/application-services";
 import { GenerationJobCoordinator } from "@/services/generation-job-coordinator";
+import { StoryGenerationCoordinator } from "@/services/story-generation-coordinator";
 import {
   ImageGenerationOrchestrator,
 } from "@/services/image-generation-orchestrator";
@@ -47,12 +48,13 @@ import type {
   VisualReferenceMetadata,
   VisualStyleBible,
 } from "@/types/domain";
+import type { StoryDirectorRequest } from "@/types/story-director";
 
 export type { StudioView } from "@/lib/project-storage";
 
 /** React-facing facade. Business transitions, persistence, and provider calls live outside it. */
 export function useProjectStore(services: ApplicationServices = defaultApplicationServices) {
-  const { persistence, imageGeneration } = services;
+  const { persistence, imageGeneration, storyDirector } = services;
   const snapshot = useSyncExternalStore(
     persistence.subscribe,
     persistence.getSnapshot,
@@ -76,6 +78,10 @@ export function useProjectStore(services: ApplicationServices = defaultApplicati
     () => new GenerationJobCoordinator(orchestrator, stateGateway),
     [orchestrator, stateGateway],
   );
+  const storyCoordinator = useMemo(
+    () => new StoryGenerationCoordinator(storyDirector, stateGateway),
+    [storyDirector, stateGateway],
+  );
   const selectedProject =
     state.projects.find((project) => project.id === state.selectedProjectId) ?? null;
 
@@ -93,6 +99,26 @@ export function useProjectStore(services: ApplicationServices = defaultApplicati
   const addProject = useCallback(() => {
     updateState((current) => addProjectToStudio(current, createProject()));
   }, [updateState]);
+
+  const openAICreator = useCallback(() => {
+    updateState((current) => ({ ...current, activeView: "ai_create" }));
+  }, [updateState]);
+
+  const generateStoryWithAI = useCallback(
+    (request: StoryDirectorRequest, accessCode?: string) =>
+      storyCoordinator.start(request, { accessCode }),
+    [storyCoordinator],
+  );
+
+  const cancelStoryGeneration = useCallback(
+    (jobId: string) => storyCoordinator.cancel(jobId),
+    [storyCoordinator],
+  );
+
+  const retryStoryGeneration = useCallback(
+    (jobId: string, accessCode?: string) => storyCoordinator.retry(jobId, { accessCode }),
+    [storyCoordinator],
+  );
 
   const selectProject = useCallback(
     (projectId: string) => updateState((current) => selectStudioProject(current, projectId)),
@@ -298,6 +324,10 @@ export function useProjectStore(services: ApplicationServices = defaultApplicati
     activeView: state.activeView,
     generationJobs: state.generationJobs,
     addProject,
+    openAICreator,
+    generateStoryWithAI,
+    cancelStoryGeneration,
+    retryStoryGeneration,
     selectProject,
     setActiveView,
     submitOnboardingAnswer,

@@ -20,6 +20,7 @@ interface AppSidebarProps {
   selectedProject: Project | null;
   activeView: StudioView;
   onCreateProject: () => void;
+  onCreateWithAI: () => void;
   onSelectProject: (projectId: string) => void;
   onSelectView: (view: StudioView) => void;
 }
@@ -40,6 +41,7 @@ export function AppSidebar({
   selectedProject,
   activeView,
   onCreateProject,
+  onCreateWithAI,
   onSelectProject,
   onSelectView,
 }: AppSidebarProps) {
@@ -54,13 +56,14 @@ export function AppSidebar({
 
       <button
         type="button"
-        onClick={onCreateProject}
+        onClick={onCreateWithAI}
         className="mt-6 flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-[#777fd7] px-3 text-[11px] font-semibold text-white shadow-[0_7px_20px_rgba(105,113,205,.18)] transition-colors hover:bg-[#858dde] max-[960px]:px-0"
-        title="New project"
+        title="Create with AI"
       >
         <Icon name="plus" size={16} />
-        <span className="max-[960px]:hidden">New project</span>
+        <span className="max-[960px]:hidden">Create with AI</span>
       </button>
+      <button type="button" onClick={onCreateProject} className="mt-2 text-[9px] text-[#777873] hover:text-[#b7b8b2] max-[960px]:hidden">or use manual setup</button>
 
       <div className="mt-6 flex items-center justify-between px-3 max-[960px]:hidden">
         <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-[#555651]">Projects</span>

@@ -34,7 +34,10 @@ export function buildIllustrationPrompt(project: Project, page: PageBeat) {
   section("SHARED VISUAL DIRECTION", [
     ["Art style", project.styleBible.artStyle],
     ["Mood", project.styleBible.mood],
+    ["Atmosphere", project.styleBible.atmosphere],
     ["Palette", project.styleBible.palette],
+    ["Visual direction", project.styleBible.visualDirection],
+    ["Continuity rules", project.styleBible.continuityInstructions],
     ["Character continuity", project.styleBible.characterDescriptions],
     ["Project visual references", project.styleBible.visualReferences],
     ["Project instructions", project.styleBible.additionalInstructions],
@@ -56,6 +59,8 @@ export function buildIllustrationPrompt(project: Project, page: PageBeat) {
   section(`PAGE ${page.order}`, [
     ["Title", page.title],
     ["Scene", page.description],
+    ["Location", page.location],
+    ["Time and lighting", page.timeAndLighting],
     ["Visual direction", visualDirectionRepeatsStyleBible ? "" : page.visualDirection],
     ["Narration", page.narration],
     ["Dialogue", page.dialogue],

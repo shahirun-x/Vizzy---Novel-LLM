@@ -3,8 +3,9 @@ import type {
   VisualReferenceMetadata,
   VisualStyleBible,
 } from "@/types/domain";
+import type { StoryDirectorRequest } from "@/types/story-director";
 
-export type GenerationOperationType = "initial_generation" | "refinement";
+export type GenerationOperationType = "initial_generation" | "refinement" | "story_generation";
 
 export type GenerationJobStatus =
   | "queued"
@@ -58,13 +59,21 @@ export interface RefinementRequestSnapshot extends GenerationRequestContext {
 
 export type GenerationRequestSnapshot =
   | InitialGenerationRequestSnapshot
-  | RefinementRequestSnapshot;
+  | RefinementRequestSnapshot
+  | StoryGenerationRequestSnapshot;
+
+export interface StoryGenerationRequestSnapshot {
+  operationType: "story_generation";
+  projectId: string;
+  pageId: null;
+  request: StoryDirectorRequest;
+}
 
 /** Serializable operation metadata. Live controllers and promises are never stored here. */
 export interface GenerationJob {
   id: string;
   projectId: string;
-  pageId: string;
+  pageId: string | null;
   operationType: GenerationOperationType;
   status: GenerationJobStatus;
   createdAt: string;
@@ -77,4 +86,5 @@ export interface GenerationJob {
   error: GenerationJobErrorInfo | null;
   resultBatchId: string | null;
   resultVersionIds: string[];
+  resultProjectId: string | null;
 }

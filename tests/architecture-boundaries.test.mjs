@@ -37,6 +37,7 @@ const applicationServices = loadTypeScriptModule(
   "../src/services/application-services.ts",
   {
     "@/services/mock-image-generation": mockImageGeneration,
+    "@/services/remote-ai-story-director": { RemoteAIStoryDirectorService: class {} },
     "@/services/studio-persistence": studioPersistence,
   },
 );
@@ -297,7 +298,7 @@ test("selection, approval protection, and reopening retain exact version history
   assert.equal(creation.imageVersions.length, 2);
 });
 
-test("browser persistence restores version-6 state and notifies same-tab subscribers", () => {
+test("browser persistence restores version-7 state and notifies same-tab subscribers", () => {
   const originalWindow = globalThis.window;
   const values = new Map();
   const listeners = new Map();
@@ -334,7 +335,10 @@ test("browser persistence restores version-6 state and notifies same-tab subscri
     persistence.write(state);
 
     assert.equal(notifications, 1);
-    assert.deepEqual(projectStorage.parseStudioSnapshot(persistence.getSnapshot()), state);
+    assert.deepEqual(
+      projectStorage.parseStudioSnapshot(persistence.getSnapshot()),
+      projectStorage.migrateStudioState(state),
+    );
     unsubscribe();
     persistence.write(state);
     assert.equal(notifications, 1);

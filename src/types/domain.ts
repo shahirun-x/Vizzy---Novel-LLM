@@ -3,6 +3,9 @@ export interface Project {
   id: string;
   title: string;
   description: string;
+  genre: string;
+  narrativePremise: string;
+  creationSource: "manual" | "ai";
   createdAt: string;
   updatedAt: string;
   outputType: VisualOutputType | null;
@@ -50,6 +53,10 @@ export interface StoryPlan {
   id: string;
   projectId: string;
   synopsis: string;
+  beginning: string;
+  middle: string;
+  ending: string;
+  creationSource: "manual" | "ai";
   targetPageCount: number;
   status: StoryPlanStatus;
   pageBeats: PageBeat[];
@@ -67,6 +74,9 @@ export interface PageBeat {
   visualDirection: string;
   narration: string;
   dialogue: string;
+  characterIds: string[];
+  location: string;
+  timeAndLighting: string;
   optionalActLabel?: string;
   status: PageBeatStatus;
   creation: PageCreationState;
@@ -170,7 +180,10 @@ export interface VisualStyleBible {
   projectId: string;
   artStyle: string;
   mood: string;
+  atmosphere: string;
   palette: string;
+  visualDirection: string;
+  continuityInstructions: string;
   characterDescriptions: string;
   visualReferences: string;
   additionalInstructions: string;
@@ -181,5 +194,10 @@ export interface Character {
   id: string;
   projectId: string;
   name: string;
+  role: string;
   description: string;
+  physicalDescription: string;
+  clothing: string;
+  distinguishingFeatures: string;
+  continuityNotes: string;
 }

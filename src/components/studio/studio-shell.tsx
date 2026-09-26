@@ -14,6 +14,10 @@ export function StudioShell() {
     activeView,
     generationJobs,
     addProject,
+    openAICreator,
+    generateStoryWithAI,
+    cancelStoryGeneration,
+    retryStoryGeneration,
     selectProject,
     setActiveView,
     submitOnboardingAnswer,
@@ -99,9 +103,9 @@ export function StudioShell() {
         )}
         <button
           type="button"
-          onClick={addProject}
+          onClick={openAICreator}
           className="grid h-9 w-9 place-items-center rounded-lg bg-[#777fd7] text-white"
-          aria-label="New project"
+          aria-label="Create with AI"
         >
           <Icon name="plus" size={17} />
         </button>
@@ -112,6 +116,7 @@ export function StudioShell() {
         selectedProject={selectedProject}
         activeView={activeView}
         onCreateProject={addProject}
+        onCreateWithAI={openAICreator}
         onSelectProject={selectProject}
         onSelectView={setActiveView}
       />
@@ -119,6 +124,10 @@ export function StudioShell() {
         project={selectedProject}
         activeView={activeView}
         onCreateProject={addProject}
+        onCreateWithAI={openAICreator}
+        onGenerateStoryWithAI={generateStoryWithAI}
+        onCancelStoryGeneration={cancelStoryGeneration}
+        onRetryStoryGeneration={retryStoryGeneration}
         onSelectView={setActiveView}
         onUpdateStyleBible={updateStyleBible}
         onGenerateStoryPlan={generateStoryPlan}

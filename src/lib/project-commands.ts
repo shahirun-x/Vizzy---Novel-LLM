@@ -131,7 +131,7 @@ function refreshProjectPrompts(project: Project) {
 export function addProjectToStudio(state: PersistedStudioState, project: Project) {
   return {
     ...state,
-    version: 6 as const,
+    version: 7 as const,
     projects: [...state.projects, project],
     selectedProjectId: project.id,
     activeView: "story" as const,
@@ -199,7 +199,13 @@ export function updateSelectedProjectStyleBible(
                     id: project.characters[0]?.id ?? `character-${project.id}`,
                     projectId: project.id,
                     name: project.characters[0]?.name ?? "Main character notes",
+                    role: project.characters[0]?.role ?? "Main character",
                     description: characterDescriptions,
+                    physicalDescription: characterDescriptions,
+                    clothing: project.characters[0]?.clothing ?? "",
+                    distinguishingFeatures:
+                      project.characters[0]?.distinguishingFeatures ?? "",
+                    continuityNotes: project.characters[0]?.continuityNotes ?? "",
                   },
                 ]
               : [],

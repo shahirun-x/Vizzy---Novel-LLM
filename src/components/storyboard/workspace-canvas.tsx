@@ -3,6 +3,7 @@ import { PageCreationWorkspace } from "@/components/storyboard/page-creation-wor
 import { StoryPlanningPanel } from "@/components/storyboard/story-planning-panel";
 import { StyleBiblePanel } from "@/components/storyboard/style-bible-panel";
 import { VisualBookReader } from "@/components/storyboard/visual-book-reader";
+import { AIStoryCreator } from "@/components/storyboard/ai-story-creator";
 import { Icon } from "@/components/ui/icon";
 import type { StudioView } from "@/hooks/use-project-store";
 import { getOutputTypeLabel, ONBOARDING_STEP_ORDER } from "@/lib/onboarding";
@@ -14,11 +15,16 @@ import type {
   VisualStyleBible,
 } from "@/types/domain";
 import type { GenerationJob } from "@/types/generation-job";
+import type { StoryDirectorRequest } from "@/types/story-director";
 
 interface WorkspaceCanvasProps {
   project: Project | null;
   activeView: StudioView;
   onCreateProject: () => void;
+  onCreateWithAI: () => void;
+  onGenerateStoryWithAI: (request: StoryDirectorRequest, accessCode?: string) => Promise<string>;
+  onCancelStoryGeneration: (jobId: string) => void;
+  onRetryStoryGeneration: (jobId: string, accessCode?: string) => Promise<string>;
   onSelectView: (view: StudioView) => void;
   onUpdateStyleBible: (updates: Partial<Omit<VisualStyleBible, "projectId">>) => void;
   onGenerateStoryPlan: (pageCount: number) => void;
@@ -59,7 +65,7 @@ interface WorkspaceCanvasProps {
   onApproveStoryPlan: () => void;
 }
 
-function EmptyWorkspace({ onCreateProject }: { onCreateProject: () => void }) {
+function EmptyWorkspace({ onCreateProject, onCreateWithAI }: { onCreateProject: () => void; onCreateWithAI: () => void }) {
   return (
     <div className="relative z-10 w-full min-w-0 max-w-[390px] rounded-2xl border border-white/65 bg-[#fbf8f2]/90 px-7 py-8 text-center shadow-[0_18px_50px_rgba(75,67,58,.13)] backdrop-blur-md sm:px-9">
       <div className="mx-auto grid h-11 w-11 place-items-center rounded-xl bg-[#282927] text-[#f6f1e8] shadow-lg">
@@ -73,12 +79,13 @@ function EmptyWorkspace({ onCreateProject }: { onCreateProject: () => void }) {
       </p>
       <button
         type="button"
-        onClick={onCreateProject}
+        onClick={onCreateWithAI}
         className="mt-6 inline-flex items-center gap-2 rounded-xl bg-[#282927] px-4 py-2.5 text-[10px] font-semibold text-white transition-colors hover:bg-[#3b3c39]"
       >
-        <Icon name="plus" size={15} />
-        Create your first project
+        <Icon name="sparkles" size={15} />
+        Create with AI
       </button>
+      <button type="button" onClick={onCreateProject} className="ml-2 mt-6 rounded-xl border border-[#5e594f]/15 px-4 py-2.5 text-[10px] font-semibold text-[#504d47] hover:bg-white">Manual setup</button>
     </div>
   );
 }
@@ -96,16 +103,20 @@ function ProjectSummary({ project, onSelectView }: { project: Project; onSelectV
     { label: "Characters", value: project.styleBible.characterDescriptions },
     { label: "References", value: project.styleBible.visualReferences },
     { label: "Instructions", value: project.styleBible.additionalInstructions },
+    { label: "Atmosphere", value: project.styleBible.atmosphere },
+    { label: "Continuity", value: project.styleBible.continuityInstructions },
   ].filter((item) => item.value);
+  const aiPlanReady = project.creationSource === "ai" && project.storyPlan?.status === "approved";
 
   return (
-    <div className="relative z-10 w-full max-w-[470px] rounded-2xl border border-white/70 bg-[#fbf8f2]/95 px-7 py-7 shadow-[0_22px_60px_rgba(75,67,58,.15)] backdrop-blur-md">
+    <div className={`relative z-10 w-full rounded-2xl border border-white/70 bg-[#fbf8f2]/95 px-7 py-7 shadow-[0_22px_60px_rgba(75,67,58,.15)] backdrop-blur-md ${project.creationSource === "ai" ? "max-w-[760px]" : "max-w-[470px]"}`}>
       <div className="flex items-center gap-2 text-[#657053]">
         <span className="grid h-7 w-7 place-items-center rounded-full bg-[#dce6d4] text-[13px]">✓</span>
         <span className="text-[9px] font-bold uppercase tracking-[0.16em]">Creative direction ready</span>
       </div>
       <h2 className="mt-4 font-serif text-[26px] tracking-[-0.035em] text-[#292a27]">{project.title}</h2>
       <p className="mt-3 line-clamp-4 text-[11px] leading-[1.7] text-[#6f6b63]">{project.description}</p>
+      {project.genre && <p className="mt-2 text-[9px] font-semibold uppercase tracking-wide text-[#777fd7]">{project.genre} · {project.characters.length} character{project.characters.length === 1 ? "" : "s"} · {project.storyPlan?.pageBeats.length ?? 0} pages</p>}
 
       <div className="mt-5 grid grid-cols-2 gap-3 border-y border-[#696157]/10 py-4">
         <div>
@@ -156,6 +167,31 @@ function ProjectSummary({ project, onSelectView }: { project: Project; onSelectV
         )}
       </div>
 
+      {aiPlanReady && (
+        <div className="mt-4 space-y-4">
+          <div>
+            <div className="text-[8px] font-bold uppercase tracking-[0.14em] text-[#8b857c]">Characters</div>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {project.characters.map((character) => (
+                <span key={character.id} className="rounded-lg border border-[#696157]/10 bg-white/45 px-2.5 py-2 text-[9px] text-[#5f5b54]"><strong>{character.name}</strong> · {character.role}</span>
+              ))}
+            </div>
+          </div>
+          <div>
+            <div className="text-[8px] font-bold uppercase tracking-[0.14em] text-[#8b857c]">Approved page plan</div>
+            <div className="mt-2 grid gap-2 sm:grid-cols-3">
+              {project.storyPlan?.pageBeats.map((page) => (
+                <div key={page.id} className="rounded-lg border border-[#696157]/10 bg-white/45 p-2.5">
+                  <span className="text-[8px] font-bold uppercase text-[#969087]">Page {page.order}</span>
+                  <p className="mt-1 line-clamp-1 text-[9px] font-semibold text-[#45443f]">{page.title}</p>
+                  <p className="mt-1 line-clamp-2 text-[8px] leading-relaxed text-[#777269]">{page.description}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="mt-6 flex flex-wrap gap-2">
         <button
           type="button"
@@ -166,10 +202,10 @@ function ProjectSummary({ project, onSelectView }: { project: Project; onSelectV
         </button>
         <button
           type="button"
-          onClick={() => onSelectView("planning")}
+          onClick={() => onSelectView(aiPlanReady ? "pages" : "planning")}
           className="rounded-xl bg-[#282927] px-3.5 py-2.5 text-[10px] font-semibold text-white transition-colors hover:bg-[#3b3c39]"
         >
-          Continue to story planning
+          {aiPlanReady ? "Continue to Illustration" : "Continue to story planning"}
         </button>
       </div>
     </div>
@@ -217,6 +253,10 @@ export function WorkspaceCanvas({
   project,
   activeView,
   onCreateProject,
+  onCreateWithAI,
+  onGenerateStoryWithAI,
+  onCancelStoryGeneration,
+  onRetryStoryGeneration,
   onSelectView,
   onUpdateStyleBible,
   onGenerateStoryPlan,
@@ -242,7 +282,7 @@ export function WorkspaceCanvas({
   onMovePage,
   onApproveStoryPlan,
 }: WorkspaceCanvasProps) {
-  const title = project?.title ?? "Vizzy Studio";
+  const title = activeView === "ai_create" ? "Create with AI" : project?.title ?? "Vizzy Studio";
   const selectedPage = project?.storyPlan?.pageBeats.find(
     (page) => page.id === project.selectedPageBeatId,
   );
@@ -260,7 +300,9 @@ export function WorkspaceCanvas({
             )}
           </div>
           <p className="mt-1 text-[10px] text-[#8a857d]">
-            {activeView === "style_bible"
+            {activeView === "ai_create"
+              ? "AI-native story creation"
+              : activeView === "style_bible"
               ? "Visual Style Bible"
               : activeView === "planning"
                 ? "Editorial planning board"
@@ -304,8 +346,16 @@ export function WorkspaceCanvas({
       <div className={`studio-scrollbar relative flex min-h-0 flex-1 overflow-y-auto overflow-x-hidden ${activeView === "reader" ? "p-3" : "p-7 max-[1180px]:p-6"} ${["style_bible", "planning", "pages", "page_creation", "reader"].includes(activeView) ? "items-start" : "items-center justify-center"}`}>
         <div className="pointer-events-none absolute inset-0 opacity-[0.17] [background-image:linear-gradient(rgba(55,50,44,.13)_1px,transparent_1px),linear-gradient(90deg,rgba(55,50,44,.13)_1px,transparent_1px)] [background-size:24px_24px]" />
 
-        {!project ? (
-          <EmptyWorkspace onCreateProject={onCreateProject} />
+        {activeView === "ai_create" ? (
+          <AIStoryCreator
+            jobs={generationJobs}
+            onGenerate={onGenerateStoryWithAI}
+            onCancel={onCancelStoryGeneration}
+            onRetry={onRetryStoryGeneration}
+            onManualCreate={onCreateProject}
+          />
+        ) : !project ? (
+          <EmptyWorkspace onCreateProject={onCreateProject} onCreateWithAI={onCreateWithAI} />
         ) : activeView === "style_bible" ? (
           <StyleBiblePanel project={project} onChange={onUpdateStyleBible} />
         ) : activeView === "planning" ? (
