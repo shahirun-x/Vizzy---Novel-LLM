@@ -155,9 +155,19 @@ One `PageBeat` represents one future illustrated page and contains:
 
 Nested comic-panel modeling remains intentionally out of scope.
 
+## State and service architecture
+
+`useProjectStore` remains the stable React-facing facade used by the studio components. It subscribes to serialized state, exposes the existing UI command names, and coordinates asynchronous generation. Framework-independent state transitions live in `src/lib/project-commands.ts`; they contain project, planning, page-creation, selection, refinement, approval, and reopening rules without depending on React, browser storage, UI components, or an AI SDK.
+
+`src/services/studio-persistence.ts` defines the narrow persistence contract and supplies the default browser-local adapter. Domain commands operate only on state values and do not know where those values are stored. This keeps a future cloud persistence migration separate from creative workflow logic without introducing a repository framework.
+
+`src/services/application-services.ts` is the application dependency boundary. Its zero-configuration defaults use `MockImageGenerationService` and browser persistence. `ImageGenerationOrchestrator` prepares and validates provider-independent generation/refinement requests, then delegates through the existing `ImageGenerationService` interface. A future provider can be supplied with `createApplicationServices({ imageGeneration: provider })` and passed to `useProjectStore(services)` without changing UI components or domain commands. No real provider is implemented or required today.
+
+See [docs/architecture.md](docs/architecture.md) for the dependency flow and replacement guidance.
+
 ## Local persistence
 
-The complete prototype state is stored in browser `localStorage` under `vizzy:studio-state`. `useProjectStore` is the only browser-storage boundary. It persists projects, selection, workspace view, onboarding, Style Bible, chat histories, story plans, page edits and ordering, approval state, selected page, page creative settings, prepared prompts, reference metadata, and page conversations. Reader playback, timing, captions, looping, and the current reader page remain temporary UI state and do not alter project records.
+The complete prototype state is stored in browser `localStorage` under `vizzy:studio-state` by the default `StudioPersistence` adapter. It persists projects, selection, workspace view, onboarding, Style Bible, chat histories, story plans, page edits and ordering, approval state, selected page, page creative settings, prepared prompts, reference metadata, and page conversations. Reader playback, timing, captions, looping, and the current reader page remain temporary UI state and do not alter project records.
 
 The storage envelope is now version 5. `src/lib/project-storage.ts` accepts version-1 through version-5 snapshots, adds missing planning, page-creation, visual-version, lineage, or approval fields, and preserves existing story, style, character, selection, chat, plan, page, and generation-history data. Migrated state is written as version 5 on the next state change.
 
@@ -181,7 +191,7 @@ Data remains local to the current browser profile and device. Clearing site data
 
 ## Planned architecture
 
-`src/services/image-generation.ts` defines the provider boundary for initial generation, multiple options, references, Style Bible context, and parent-version refinement. `src/services/mock-image-generation.ts` implements generation and recognizable deterministic refinements with clearly labelled local SVG visuals. A future provider can replace that service without changing the page history, approval model, or UI contract.
+`src/services/image-generation.ts` defines the provider boundary for initial generation, multiple options, references, Style Bible context, and parent-version refinement. `src/services/mock-image-generation.ts` implements generation and recognizable deterministic refinements with clearly labelled local SVG visuals. The provider is injected through application services; a future real implementation can replace the mock without changing the page history, approval model, UI contract, or serialized version-5 state.
 
 `src/lib/story-assembly.ts` is the framework-independent visual-book assembly boundary. It sorts approved page beats, resolves only each page's `approvedImageVersionId`, reports gaps or invalid ordering, and returns immutable reader-page data. `VisualBookReader` owns transient playback controls and browser fullscreen behavior without changing generation, refinement, selection, or approval state.
 
